@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>For You Only</title>
+  <title>For Only You</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -14,8 +14,10 @@
       --line-stagger: 300ms;
       --line-fade-dur: 1200ms;
 
+      /* Desktop defaults (match v44) */
       --ring-width: 760px;
       --ring-height: 76px;
+
       --bg-1: #0e1117;
       --bg-2: #0b0e14;
       --panel: #121826;
@@ -45,6 +47,7 @@
       place-items: center;
       min-height: 100vh;
       padding: 18px;
+      overflow-x: hidden; /* NEW: prevent horizontal spill on mobile */
     }
 
     .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
@@ -58,6 +61,7 @@
       cursor: grab; font-size: 20px; color: var(--drag-handle);
       background: linear-gradient(180deg, #0e1423, #0b1120);
       border-radius: 12px; margin-right: 10px; border:1px solid #202a3f;
+      min-width: 44px;
     }
     .drag-handle:active{ cursor: grabbing; }
 
@@ -82,8 +86,12 @@
     .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
     .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
 
-    .card > span{ display:block; width: 100%; white-space: normal;
-                  font-size: clamp(14px, 1.75vw, 18px); }
+    .card > span{
+      display:block; width: 100%; white-space: normal;
+      /* Scale text with viewport but cap for legibility */
+      font-size: clamp(14px, 4.0vw, 18px); /* NEW: was 1.75vw; this is friendlier on phones */
+      word-break: normal;
+    }
 
     @keyframes spinSmooth { from { transform: rotateY(0deg) translateZ(0.1px); }
                             to   { transform: rotateY(360deg) translateZ(0.1px); } }
@@ -115,7 +123,12 @@
       padding: 5px 10px; font-size: .88rem; font-weight: 700;
       filter: drop-shadow(0 0 6px rgba(255,209,102,.35));
     }
-    .poem .quote{ text-align:center; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.35; }
+    .poem .quote{
+      text-align:center;
+      font-size: clamp(18px, 5.2vw, 32px); /* NEW: scales better on phones */
+      line-height: 1.35;
+      word-break: normal;
+    }
     .poem .byline{ margin-top: 6px; text-align:center; color: var(--muted); font-size: .95rem; font-style: italic; }
 
     .line { opacity: 0; transform: translateY(6px);
@@ -142,7 +155,7 @@
       display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
       background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 12px;
     }
-    .seek{ display:flex; align-items:center; gap:10px; flex:1; }
+    .seek{ display:flex; align-items:center; gap:10px; flex:1; min-width: 160px; }
     .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
     .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
 
@@ -159,6 +172,52 @@
     #consent-msg{ font-size:.92rem; opacity:.9; }
 
     #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
+
+    /* ---------- Responsive tweaks (no layout changes) ---------- */
+
+    /* Tablet-ish */
+    @media (max-width: 768px){
+      :root{
+        --ring-width: 96vw;        /* use almost full width */
+        --ring-height: 68px;       /* slightly shorter rings */
+      }
+      body{ padding: 14px; }
+      .wrap{ gap: 12px; }
+      .stage{ gap: 12px; }
+      .drag-handle{ font-size: 18px; min-width: 40px; }
+      .poem .quote{ font-size: clamp(18px, 4.8vw, 28px); }
+      .controls button{ padding: 10px 14px; }
+      .ticker{ min-width: 200px; }
+      .player-row{ gap: 8px; }
+    }
+
+    /* Phones */
+    @media (max-width: 480px){
+      :root{
+        --ring-width: 96vw;        /* full width minus padding */
+        --ring-height: 56px;       /* comfortable tap/fit */
+      }
+      body{ padding: 10px; }
+      .wrap{ gap: 10px; }
+      .stage{ gap: 10px; }
+      .drag-handle{ font-size: 18px; min-width: 36px; }
+      .card{ padding: 0 14px; }
+      .card > span{ font-size: clamp(14px, 4.5vw, 17px); }
+
+      .controls{ gap: 8px; }
+      .controls button{ padding: 10px 12px; }
+
+      .music{ gap: 10px; padding: 10px 12px; }
+      .music-row{
+        flex-direction: column; align-items: stretch; gap: 10px;
+      }
+      .ticker{ min-width: 0; width: 100%; }
+      .player-row{
+        flex-direction: column; align-items: stretch; gap: 8px;
+      }
+      .seek{ min-width: 0; }
+      .time{ text-align: left; }
+    }
   </style>
 </head>
 <body>
@@ -255,17 +314,13 @@ const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
 
-/* ---------- NEW: robust waiting for tracks.json ---------- */
+/* Waiting helper (ensures tracks.json loaded) */
 function waitForLibraryReady(){
   return new Promise((resolve) => {
-    // Already loaded?
     if (window.LIBRARY && window.LIBRARY.length) return resolve();
-    // If index.js exposed a promise, use it
     if (window.musicReady && typeof window.musicReady.then === 'function'){
-      window.musicReady.then(resolve);
-      return;
+      window.musicReady.then(resolve); return;
     }
-    // Else wait for the event index.js dispatches
     window.addEventListener('musicReady', resolve, { once: true });
   });
 }
@@ -527,8 +582,8 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
 
 /* ======== AUTOPLAY: try on open, else show consent (waits for library) ======== */
 async function tryStartRandomSong() {
-  await waitForLibraryReady();               // <-- ensure tracks.json loaded
-  LIBRARY = window.LIBRARY || [];            // <-- refresh our local ref
+  await waitForLibraryReady();
+  LIBRARY = window.LIBRARY || [];
   if (!LIBRARY.length) return false;
   if (!bag.length) rebuildBag();
   try {
@@ -550,7 +605,6 @@ function showAudioConsentOverlay() {
   overlay.style.display = 'flex';
 
   const enable = async () => {
-    // Ensure library is ready, then rebuild bag and try again
     await waitForLibraryReady();
     LIBRARY = window.LIBRARY || [];
     rebuildBag();
