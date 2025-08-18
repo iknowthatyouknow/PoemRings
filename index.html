@@ -255,6 +255,21 @@ const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
 
+/* ---------- NEW: robust waiting for tracks.json ---------- */
+function waitForLibraryReady(){
+  return new Promise((resolve) => {
+    // Already loaded?
+    if (window.LIBRARY && window.LIBRARY.length) return resolve();
+    // If index.js exposed a promise, use it
+    if (window.musicReady && typeof window.musicReady.then === 'function'){
+      window.musicReady.then(resolve);
+      return;
+    }
+    // Else wait for the event index.js dispatches
+    window.addEventListener('musicReady', resolve, { once: true });
+  });
+}
+
 function fisherYatesShuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); fisherYatesShuffle(bag); bagPos=-1; }
 function nextFromBag(){ if (!bag.length) rebuildBag(); bagPos++; if (bagPos>=bag.length){ rebuildBag(); bagPos=0; } return bag[bagPos]; }
@@ -510,9 +525,12 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
   }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
 });
 
-/* ======== AUTOPLAY: try on open, else show consent (no alerts) ======== */
+/* ======== AUTOPLAY: try on open, else show consent (waits for library) ======== */
 async function tryStartRandomSong() {
-  if (!window.LIBRARY || !window.LIBRARY.length) return false;
+  await waitForLibraryReady();               // <-- ensure tracks.json loaded
+  LIBRARY = window.LIBRARY || [];            // <-- refresh our local ref
+  if (!LIBRARY.length) return false;
+  if (!bag.length) rebuildBag();
   try {
     const idx = nextFromBag();
     if (typeof idx === 'number') {
@@ -521,7 +539,6 @@ async function tryStartRandomSong() {
     }
     return false;
   } catch(e){
-    // do not alert; just return false and keep overlay visible
     return false;
   }
 }
@@ -532,21 +549,22 @@ function showAudioConsentOverlay() {
   if (!overlay || !btn) return;
   overlay.style.display = 'flex';
 
-  // One-time handler
   const enable = async () => {
-    // First, try to start random track (satisfies most browsers after a user click)
+    // Ensure library is ready, then rebuild bag and try again
+    await waitForLibraryReady();
+    LIBRARY = window.LIBRARY || [];
+    rebuildBag();
+
     const ok = await tryStartRandomSong();
     if (ok) {
       localStorage.setItem('poem.audioConsent', '1');
       overlay.style.display = 'none';
       return;
     }
-    // If still blocked, update hint silently (no alert), keep overlay visible
     if (msg) msg.textContent = "Tap the ▶️ Play/Pause button once, then tap Enable Sound again.";
   };
   btn.onclick = enable;
 
-  // Optional: allow tapping the backdrop
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) enable();
   }, { once:false });
@@ -575,7 +593,7 @@ renderPoem(true);
 initVolume();
 
 /* Wait for the music library from index.js before building the bag */
-Promise.resolve(window.musicReady).then(() => {
+waitForLibraryReady().then(() => {
   LIBRARY = window.LIBRARY || [];
   rebuildBag();
   seekRange.value = 0;
