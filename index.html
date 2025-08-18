@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>For You Only</title>
+  <title>For Only You</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -156,6 +156,7 @@
       background:#11161c; border:1px solid #26313d; border-radius:14px; padding:18px 16px; max-width:520px;
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
+    #consent-msg{ font-size:.92rem; opacity:.9; }
 
     #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
   </style>
@@ -165,7 +166,7 @@
   <div id="audio-consent">
     <div class="card">
       <h2 style="margin:0 0 8px;">Enable sound?</h2>
-      <p style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
+      <p id="consent-msg" style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
       <button id="audio-consent-btn" style="padding:10px 16px; border:0; border-radius:8px; font-weight:600; cursor:pointer;">Enable Sound</button>
     </div>
   </div>
@@ -509,7 +510,7 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
   }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
 });
 
-/* ======== AUTOPLAY: try on open, else show consent ======== */
+/* ======== AUTOPLAY: try on open, else show consent (no alerts) ======== */
 async function tryStartRandomSong() {
   if (!window.LIBRARY || !window.LIBRARY.length) return false;
   try {
@@ -520,27 +521,35 @@ async function tryStartRandomSong() {
     }
     return false;
   } catch(e){
+    // do not alert; just return false and keep overlay visible
     return false;
   }
 }
 function showAudioConsentOverlay() {
   const overlay = document.getElementById('audio-consent');
   const btn = document.getElementById('audio-consent-btn');
+  const msg = document.getElementById('consent-msg');
   if (!overlay || !btn) return;
   overlay.style.display = 'flex';
+
+  // One-time handler
   const enable = async () => {
+    // First, try to start random track (satisfies most browsers after a user click)
     const ok = await tryStartRandomSong();
     if (ok) {
       localStorage.setItem('poem.audioConsent', '1');
       overlay.style.display = 'none';
-    } else {
-      alert('Still blocked by browser. Tap the ▶️ button once, then try again.');
+      return;
     }
+    // If still blocked, update hint silently (no alert), keep overlay visible
+    if (msg) msg.textContent = "Tap the ▶️ Play/Pause button once, then tap Enable Sound again.";
   };
   btn.onclick = enable;
+
+  // Optional: allow tapping the backdrop
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) enable();
-  });
+  }, { once:false });
 }
 async function attemptAutoplayOnOpen(){
   const ok = await tryStartRandomSong();
@@ -571,7 +580,7 @@ Promise.resolve(window.musicReady).then(() => {
   rebuildBag();
   seekRange.value = 0;
 
-  // Try to autoplay once the library is ready
+  // Try to autoplay once the library is ready (quiet overlay if blocked)
   attemptAutoplayOnOpen();
 });
 
