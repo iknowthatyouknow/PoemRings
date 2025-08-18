@@ -148,6 +148,33 @@
 </style>
 </head>
 <body>
+  <!-- One-time audio consent overlay (appears only if autoplay is blocked) -->
+<div id="audio-consent" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter: blur(2px); z-index:9999; color:#fff; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px;">
+  <div style="max-width:520px; line-height:1.4;">
+    <h2 style="margin:0 0 8px;">Enable sound?</h2>
+    <p style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
+    <button id="audio-consent-btn" style="padding:10px 16px; border:0; border-radius:8px; font-weight:600; cursor:pointer;">Enable Sound</button>
+  </div>
+</div>
+
+<!-- Optional tiny warning if library fallback is used -->
+<div id="libWarn" style="display:none;color:#ffb703;text-align:center;margin-top:6px;">
+  ⚠️ Couldn’t load the full music library; using a tiny fallback list.
+</div>
+
+<!-- Poem history panel -->
+<details id="poemHistoryPanel" style="margin:16px auto; max-width:900px;">
+  <summary style="cursor:pointer; font-weight:600;">Poem history (timestamped)</summary>
+  <div style="display:flex; gap:12px; align-items:flex-start; margin-top:8px; flex-wrap:wrap;">
+    <select id="poemHistorySelect" size="6" style="min-width:280px; flex:1 1 320px;"></select>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button id="poemHistoryRestore" title="Show the selected poem in the output">Show</button>
+      <button id="poemHistoryClear" title="Clear all saved poems">Clear</button>
+      <button id="poemHistoryExport" title="Download CSV of saved poems">Export CSV</button>
+    </div>
+  </div>
+</details>
+
   <!-- Hidden special-test button (also Shift+S) -->
   <button id="testSpecialBtn" aria-label="Generate special poem">hidden</button>
 
