@@ -499,19 +499,49 @@ function initVolume(){
     localStorage.setItem('poem_vol', String(player.volume));
   });
 }
-
-/* Build & start */
-/* Build & start */
+/*  ====== Build & start ========*/
 buildRings();
 renderPoem(true);
 initVolume();
 
-Promise.resolve(window.musicReady).then(() => {
+/** Wait until the library is really present (index.js → tracks.json) */
+function waitForLibrary() {
+  // already loaded?
+  if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries++;
+      if (window.LIBRARY && window.LIBRARY.length) {
+        clearInterval(iv);
+        resolve();
+      } else if (tries > 200) { // ~10s max
+        clearInterval(iv);
+        resolve(); // give up but continue; fallback will show
+      }
+    }, 50);
+
+    // Also resolve when index.js dispatches the ready event (see step 3B)
+    window.addEventListener('musicReady', () => {
+      clearInterval(iv);
+      resolve();
+    }, { once: true });
+  });
+}
+
+waitForLibrary().then(() => {
   LIBRARY = window.LIBRARY || [];
+  if (!LIBRARY.length || LIBRARY.length <= 2) {
+    const warn = document.getElementById('libWarn');
+    if (warn) warn.style.display = 'block';
+    console.warn('[music] library looks small; probably using fallback');
+  } else {
+    console.log('[music] library ready with', LIBRARY.length, 'tracks');
+  }
   rebuildBag();
   seekRange.value = 0;
 });
-
 
 /* Hidden special test: Shift+S */
 document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
