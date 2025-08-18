@@ -1,494 +1,622 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Load the library loader FIRST (cache-busted) -->
+  <script src="index.js?v=7" defer></script>
+
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Poem Rings</title>
-
-  <!-- Load the music library loader FIRST (cache-busted) -->
-  <script src="index.js?v=6" defer></script>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Poem Rings — v44 (reorder + no-repeat shuffle)</title>
   <style>
-    :root {
-      --bg: #0d0f12;
-      --fg: #e9edf3;
-      --muted: #9aa8b4;
+    :root{
+      --spin-duration: 1200ms;
+      --stair-fraction: 0.25;   /* each next ring starts at 25% of animation */
+      --line-stagger: 300ms;     /* line-by-line reveal timing */
+      --line-fade-dur: 1200ms;
+
+      --ring-width: 760px;
+      --ring-height: 76px;
+
+      --bg: #0b1120;
+      --panel: #0c1426;
+      --panel-2: #0a1220;
+      --card: #0e1729;
+      --rim:  #0f1a31;
+
+      --text: #e5ecff;
+      --muted: #b6c1d6;
+      --drag-handle: #7fb3ff;
+      --drop-hint: rgba(127,179,255,.25);
+
+      --special: #ffd166;
       --accent: #7bdff6;
-      --accent2: #ffa69e;
-      --panel: #12161b;
-      --card: #151a21;
-      --ring: #232a33;
-      --border: #2b3440;
+
+      --border: #202a3f;
+      --inset: #1a2235;
     }
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: var(--bg);
-      color: var(--fg);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
-      line-height: 1.5;
-    }
-    .wrap {
-      max-width: 1080px;
-      margin: 24px auto 80px;
-      padding: 0 16px;
-    }
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-    h1 {
-      font-size: 20px;
-      margin: 0;
-      letter-spacing: .4px;
-      font-weight: 700;
-    }
-    .controls {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    button, .button {
-      appearance: none;
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, #1a2129, #151a21);
-      color: var(--fg);
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-weight: 600;
-      cursor: pointer;
+
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+
+    .wrap{ max-width:1100px; margin: 26px auto 64px; padding: 0 16px; }
+
+    header{ display:flex; align-items:center; justify-content:space-between; gap: 12px;
+      background: linear-gradient(180deg, #0e1628, #0b1120); border:1px solid var(--border);
+      border-radius: 14px; padding: 10px 12px; box-shadow: inset 0 0 0 1px #1b2440; }
+    header h1{ margin:0; font-size: 18px; letter-spacing:.3px; color:#d9e6ff; }
+    header .controls{ display:flex; gap:10px; flex-wrap:wrap; }
+
+    button{
+      appearance: none; cursor: pointer;
+      border:1px solid var(--border);
+      background: linear-gradient(180deg, #101a34, #0d1427);
+      color: var(--text); border-radius: 10px; padding: 9px 12px; font-weight: 700;
       transition: transform .08s ease, border-color .2s ease, box-shadow .2s ease;
     }
-    button:hover {
-      transform: translateY(-1px);
-      border-color: #334253;
-      box-shadow: 0 8px 16px rgba(0,0,0,.25);
-    }
-    button:active {
-      transform: translateY(0);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap: 16px;
-    }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-    }
-    .panel h2 {
-      font-size: 14px;
-      color: var(--muted);
-      letter-spacing: .5px;
-      font-weight: 700;
-      margin: 0 0 12px;
-      text-transform: uppercase;
-    }
-    /* Placeholder “rings” area (keep your visuals here if you have them) */
-    .rings {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 10px;
-    }
-    .ring {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      min-height: 100px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted);
-      font-size: 12px;
-      text-align: center;
-      padding: 10px;
-    }
+    button:hover{ transform: translateY(-1px); border-color:#2a3753;
+      box-shadow: 0 10px 22px rgba(0,0,0,.30); }
+    button:active{ transform: translateY(0); }
 
-    /* Final poem box */
-    .poemBox {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-      min-height: 160px;
-      white-space: pre-wrap;
-      font-size: 18px; /* adjust if you want bigger/smaller */
-      line-height: 1.6;
-    }
-    .poemBox em { font-style: italic; }
+    .layout{ display:grid; grid-template-columns: 1.3fr .7fr; gap:16px; margin-top:16px; }
+    @media (max-width: 980px){ .layout{ grid-template-columns: 1fr; } }
 
-    /* Music player */
-    .music {
-      display: grid;
-      gap: 8px;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 12px;
-    }
-    .ticker {
-      font-size: 13px;
-      color: var(--muted);
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-    .sliders {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    input[type="range"] {
-      accent-color: var(--accent);
-    }
+    .left, .right{ background: linear-gradient(180deg, #0e1628, #0c1426);
+      border:1px solid var(--border); border-radius: 16px; padding: 14px;
+      box-shadow: inset 0 0 0 1px #1a2237, 0 14px 28px rgba(0,0,0,.28); }
 
-    /* Audio consent overlay (NOTE: starts hidden; JS will set display:flex only if needed) */
-    #audio-consent {
-      display: none;                /* ← keep only this one, remove any duplicate display:flex */
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.7);
-      backdrop-filter: blur(2px);
-      z-index: 9999;
-      color: #fff;
-      align-items: center;          /* these are fine even while hidden */
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
+    .section-title{ margin: 0 0 10px; color: #9fb2d6; font-size: 13px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
+
+    /* RINGS */
+    .stage{ width: min(100%, var(--ring-width)); margin: 0 auto; display:grid; gap: 10px; }
+    .ring{ position: relative; width: 100%; height: var(--ring-height);
+           display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
+    .drag-handle{
+      user-select:none; -webkit-user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      cursor: grab; font-size: 20px; color: var(--drag-handle);
+      background: linear-gradient(180deg, #0e1423, #0b1120);
+      border-radius: 12px; margin-right: 10px; border:1px solid #202a3f;
     }
-    #audio-consent .card {
-      background: #11161c;
-      border: 1px solid #26313d;
+    .drag-handle:active{ cursor: grabbing; }
+
+    .rim{ display:none; } /* decorative in older versions */
+
+    .card{
+      position: relative; width: 100%; height: 100%;
+      display: grid; place-items: center; padding: 0 18px;
       border-radius: 14px;
-      padding: 18px 16px;
-      max-width: 520px;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      box-shadow: inset 0 0 0 1px #2a3348, 0 10px 24px rgba(0,0,0,.28);
+      color: var(--text);
+      text-align: center; line-height: 1.25; letter-spacing: .2px;
+      overflow: hidden; transform: translateZ(0.1px);
+      backface-visibility: hidden; transform-style: preserve-3d;
+    }
+    .ring.drag-over .card{ outline: 2px dashed var(--drag-handle);
+                            background: linear-gradient(180deg, #101a30, #0e1628); }
+    .ring.drop-before::before, .ring.drop-after::after{
+      content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
+    }
+    .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
+    .ring.drop-after::after { bottom:-6px; border-radius:0 0 6px 6px; }
+
+    .ring span{
+      font-size: clamp(16px, 1.6vw, 20px); color:#cfe3ff; transform: translateZ(0.2px);
+    }
+
+    /* POEM box */
+    .poem{ margin-top: 16px; background: linear-gradient(180deg, #0f172a, #0d1426);
+      border: 1px solid #222c42; border-radius: 16px; padding: 14px;
+      box-shadow: inset 0 0 0 1px #1b2440; }
+    .poem-header{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px; }
+    .poem h2{ margin: 0; font-size: 1rem; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
+    .special-badge{
+      display:inline-flex; align-items:center; gap:6px;
+      color: var(--special); background: rgba(255, 209, 102, 0.12);
+      border: 1px solid rgba(255,209,102,0.45); border-radius: 999px;
+      padding: 5px 10px; font-size: .88rem; font-weight: 700;
+      filter: drop-shadow(0 0 6px rgba(255,209,102,.35));
+    }
+    .poem .quote{ text-align:center; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.35; white-space: pre-wrap; }
+    .poem .byline{ margin-top: 6px; text-align:center; color: var(--muted); font-size: .95rem; font-style: italic; }
+
+    .line { opacity: 0; transform: translateY(6px);
+            animation: lineFade var(--line-fade-dur) ease forwards; }
+    @keyframes lineFade { from { opacity: 0; transform: translateY(6px); }
+                          to   { opacity: 1; transform: translateY(0); } }
+
+    /* MUSIC player */
+    .music {
+      display: grid; gap: 12px;
+      background: linear-gradient(180deg, #0f1522, #0d1421);
+      border: 1px solid #21283a; border-radius: 14px; padding: 12px 14px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
+    }
+    .music-row { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .ticker {
+      position: relative; overflow: hidden; border:1px solid #242c3e; border-radius:10px;
+      background: #0b1120; padding: 8px 12px; min-width: 240px; flex: 1;
+    }
+    .ticker__inner { display:inline-block; white-space: nowrap; padding-left:100%;
+                     animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
+    @keyframes slide {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-100%); }
+    }
+
+    .controls button{ font-size: 16px; padding: 8px 10px; }
+    .seek{ display:flex; align-items:center; gap:8px; }
+    input[type="range"]{ accent-color: var(--accent); }
+
+    /* Library fallback notice (optional) */
+    #libWarn{ display:none; color:#ffb703; text-align:center; margin-top:6px; font-size:13px; }
+
+    /* One-time audio consent overlay — starts hidden! (JS will show if autoplay is blocked) */
+    #audio-consent{
+      display:none; position:fixed; inset:0;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(2px);
+      z-index: 9999; color:#fff; align-items:center; justify-content:center; text-align:center; padding:24px;
+    }
+    #audio-consent .card{
+      background:#11161c; border:1px solid #26313d; border-radius:14px; padding:18px 16px; max-width:520px;
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
 
-    /* Small warning if we fall back to a tiny library */
-    #libWarn {
-      display: none;
-      color: #ffb703;
-      text-align: center;
-      margin-top: 6px;
-      font-size: 13px;
-    }
+    /* Accessible, hidden button (for special test) */
+    .sr-only{ position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
   </style>
 </head>
 <body>
+  <!-- One-time audio consent overlay (only shown if autoplay is blocked) -->
+  <div id="audio-consent">
+    <div class="card">
+      <h2 style="margin:0 0 8px;">Enable sound?</h2>
+      <p style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
+      <button id="audio-consent-btn" style="padding:10px 16px; border:0; border-radius:8px; font-weight:600; cursor:pointer;">Enable Sound</button>
+    </div>
+  </div>
+
   <div class="wrap">
     <header>
       <h1>Poem Rings</h1>
       <div class="controls">
         <button id="spinBtn">✨ Create Your Next Poem</button>
+        <button id="copyBtn">📋 Copy poem</button>
+        <button id="testSpecialBtn" class="sr-only" aria-hidden="true" tabindex="-1">Trigger Special</button>
       </div>
     </header>
 
-    <div class="grid">
-      <!-- LEFT: rings + poem -->
-      <div class="panel">
-        <h2>Rings</h2>
-        <div class="rings" id="rings">
-          <div class="ring">Ring 1</div>
-          <div class="ring">Ring 2</div>
-          <div class="ring">Ring 3</div>
-          <div class="ring">Ring 4</div>
-          <div class="ring">Ring 5</div>
-        </div>
+    <div class="layout">
+      <!-- LEFT: Rings + Poem -->
+      <div class="left">
+        <h3 class="section-title">Arrange Rings</h3>
+        <div id="stage" class="stage" aria-label="Reorder poem rings"></div>
 
-        <h2 style="margin-top:16px;">Current Poem</h2>
-        <div class="poemBox" id="finalPoem">
-          <em>“Your poem will appear here…”</em> — by Aramish
+        <div class="poem" id="poemBox" aria-live="polite">
+          <div class="poem-header">
+            <h2>Current Poem</h2>
+            <!-- Special badge injects here when matched -->
+          </div>
+          <div id="poemFormatted" class="quote"></div>
+          <div class="byline">~ by Aramish</div>
         </div>
 
         <div id="libWarn">⚠️ Couldn’t load the full music library; using a tiny fallback list.</div>
       </div>
 
-      <!-- RIGHT: music -->
-      <div class="music">
-        <h2>Music</h2>
-        <div class="ticker" id="nowPlaying">No track yet.</div>
-        <audio id="player" preload="none" controls></audio>
-        <div class="sliders">
-          <label>Volume <input id="volumeRange" type="range" min="0" max="1" step="0.01" value="0.7"></label>
-          <label>Seek <input id="seekRange" type="range" min="0" max="100" value="0"></label>
-        </div>
-      </div>
-    </div>
-  </div>
+      <!-- RIGHT: Music -->
+      <div class="right">
+        <h3 class="section-title">Music</h3>
+        <div class="music">
+          <div class="music-row">
+            <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
+            <div class="controls">
+              <button id="prevBtn" title="Previous">⏮️</button>
+              <button id="playPauseBtn" title="Play/Pause">⏯️</button>
+              <button id="stopBtn" title="Stop">⏹️</button>
+              <button id="nextBtn" title="Next">⏭️</button>
+              <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#aeb7c8;">
+                Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
+              </label>
+            </div>
+          </div>
 
-  <!-- One-time audio consent overlay (only shown if autoplay is blocked) -->
-  <div id="audio-consent">
-    <div class="card">
-      <h2 style="margin:0 0 6px;">Enable sound?</h2>
-      <p style="margin:0 0 12px;">Tap once to allow background music. We’ll remember this for next time.</p>
-      <button id="audio-consent-btn">Enable Sound</button>
-    </div>
-  </div>
+          <div class="player-row">
+            <div class="seek">
+              <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
+              <audio id="player" preload="none" crossorigin="anonymous"></audio>
+            </div>
+          </div>
+        </div>
+      </div> <!-- /right -->
+    </div> <!-- /layout -->
+  </div> <!-- /wrap -->
 
   <script>
-    /* ============ Simple poem generator placeholders ============ */
-    const RINGS = [
-      [
-        "Strength in Silence",
-        "Grace Without Seeking, Calm in a Storm",
-        "The World Bends Gentler Near her Soul",
-        "She is Proof That Kindness is a Force"
-      ],
-      [
-        "Hope Carried in Quiet Hands",
-        "Stillness that softens the Sharpest Edge",
-        "She Listens Where Most Would Speak",
-        "And Builds with the Weight of Care"
-      ],
-      [
-        "She Moves Like Morning Light",
-        "Patience Carved into the Day",
-        "Every Step Writes Peace in Stone",
-        "Her Silence Steadies The Storm"
-      ],
-      [
-        "Gentle As the Breath Before Dawn",
-        "Her Voice Mends What Fear Has Broken",
-        "Fire Wrapped in Grace",
-        "Kindness Carved into Motion"
-      ],
-      [
-        "Dream in the Dawn",
-        "Truth Without Armor, Steady in Light",
-        "The Horizon Waits for Her Journey",
-        "She is Proof That Fate Wears Many Faces"
-      ]
+  /* ================== DATA (v44 rings) ================== */
+  const RINGS_DATA = [
+    [
+      "Strength in Silence",
+      "Grace Without Seeking, Calm in a Storm",
+      "The World Bends Gentler Near her Soul",
+      "She is Proof That Kindness is a Force"
+    ],
+    [
+      "Hope Carried in Quiet Hands",
+      "Stillness that softens the Sharpest Edge",
+      "She Listens Where Most Would Speak",
+      "And Builds with the Weight of Care"
+    ],
+    [
+      "She Moves Like Morning Light",
+      "Patience Carved into the Day",
+      "Every Step Writes Peace in Stone",
+      "Her Silence Steadies The Storm"
+    ],
+    [
+      "Gentle As the Breath Before Dawn",
+      "Her Voice Mends What Fear Has Broken",
+      "Fire Wrapped in Grace",
+      "Kindness Carved into Motion"
+    ],
+    [
+      "Dream in the Dawn",
+      "Truth Without Armor, Steady in Light",
+      "The Horizon Waits for Her Journey",
+      "She is Proof That Fate Wears Many Faces"
+    ]
+  ];
+
+  /* ========= STATE ========= */
+  let stacks = [];          // [{id, options[], currentIndex, card, span, el }, ...]
+  let order = [0,1,2,3,4];  // ring order indexes
+
+  /* ======= BUILD STAGE / RINGS ======= */
+  const stage = document.getElementById('stage');
+
+  function buildStage(){
+    stage.innerHTML = '';
+    stacks = [];
+    for (let i=0; i<RINGS_DATA.length; i++){
+      const el = document.createElement('div');
+      el.className = 'ring';
+      el.draggable = true;
+      el.dataset.id = i;
+
+      const drag = document.createElement('div');
+      drag.className = 'drag-handle';
+      drag.title = 'Drag to reorder';
+      drag.textContent = '↕';
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const span = document.createElement('span');
+      span.textContent = RINGS_DATA[i][0];
+      card.appendChild(span);
+
+      el.appendChild(drag);
+      el.appendChild(card);
+      stage.appendChild(el);
+
+      stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
+    }
+    wireDragAndDrop();
+  }
+
+  function wireDragAndDrop(){
+    let dragSrc = null;
+    stage.querySelectorAll('.ring').forEach(ring => {
+      ring.addEventListener('dragstart', (e) => {
+        dragSrc = ring;
+        e.dataTransfer.effectAllowed = 'move';
+        ring.classList.add('drag-over');
+      });
+      ring.addEventListener('dragend', () => {
+        stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+        dragSrc = null;
+      });
+      ring.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const rect = ring.getBoundingClientRect();
+        const midY = rect.top + rect.height/2;
+        ring.classList.add('drag-over');
+        ring.classList.toggle('drop-before', e.clientY < midY);
+        ring.classList.toggle('drop-after',  e.clientY >= midY);
+      });
+      ring.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (!dragSrc || dragSrc === ring) return;
+        const before = ring.classList.contains('drop-before');
+        stage.insertBefore(dragSrc, before ? ring : ring.nextSibling);
+        // recompute order
+        order = [...stage.querySelectorAll('.ring')].map(el => Number(el.dataset.id));
+        renderPoem(true);
+      });
+    });
+  }
+
+  /* ======= POEM RENDER ======= */
+  function renderPoem(initial=false){
+    const lines = order.map((ringIdx, i) => {
+      const s = stacks[ringIdx];
+      return s.options[s.currentIndex];
+    });
+
+    const out = document.getElementById('poemFormatted');
+    out.innerHTML = ''; // reset
+
+    // Special poem badge logic
+    const specialConditions = [
+      "Strength in Silence",
+      "Stillness that softens the Sharpest Edge",
+      "Every Step Writes Peace in Stone",
+      "Her Voice Mends What Fear Has Broken",
+      "The Horizon Waits for Her Journey"
     ];
+    const isSpecial = lines[0]===specialConditions[0] &&
+                      lines[1]===specialConditions[1] &&
+                      lines[2]===specialConditions[2] &&
+                      lines[3]===specialConditions[3] &&
+                      lines[4]===specialConditions[4];
 
-    /* ====== MUSIC (library populated by index.js) ====== */
-    const BAD_TRACKS = new Set();           // blacklist if a file fatally fails
-    let LIBRARY = window.LIBRARY || [];
-    let bag = [], bagPos = -1, currentIndex = -1;
-
-    const player = document.getElementById('player');
-    const volumeRange = document.getElementById('volumeRange');
-    const seekRange = document.getElementById('seekRange');
-    const ticker = document.getElementById('nowPlaying');
-
-    function shuffle(arr) {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
+    const header = document.querySelector('.poem-header');
+    header.querySelectorAll('.special-badge')?.forEach(n=>n.remove());
+    if (isSpecial){
+      const badge = document.createElement('div');
+      badge.className = 'special-badge';
+      badge.innerHTML = '⭐ Special Poem';
+      header.appendChild(badge);
+      playIndexForSpecial();
     }
 
-    function rebuildBag() {
-      const idx = [];
-      for (let i = 0; i < LIBRARY.length; i++) {
-        if (!BAD_TRACKS.has(LIBRARY[i].name)) idx.push(i);
-      }
-      shuffle(idx);
-      bag = idx;
-      bagPos = -1;
-      // console.log('[bag] rebuilt with', bag.length);
+    // line-by-line reveal
+    lines.forEach((line, idx) => {
+      const span = document.createElement('div');
+      span.className = 'line';
+      span.style.animationDelay = `calc(${idx} * var(--line-stagger))`;
+      span.textContent = `“${line}”`;
+      out.appendChild(span);
+    });
+  }
+
+  /* ======= COPY ======= */
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    const text = [...document.querySelectorAll('#poemFormatted .line')]
+      .map(n => n.textContent).join('\n') + '\n~ by Aramish';
+    try{
+      await navigator.clipboard.writeText(text);
+      alert('Poem copied to clipboard!');
+    }catch(e){
+      prompt('Copy the poem:', text);
     }
+  });
 
-    function initVolume() {
-      if (!player) return;
-      player.volume = Number(volumeRange?.value ?? 0.7) || 0.7;
+  /* ======= RING SPIN (next lines) ======= */
+  function spinAll(){
+    stacks.forEach((s, i) => {
+      s.currentIndex = (s.currentIndex + 1) % s.options.length;
+      s.span.textContent = s.options[s.currentIndex];
+    });
+    renderPoem(false);
+    // also pick a new random track each spin (if you want)
+    playRandomFromBag();
+  }
+  document.getElementById('spinBtn').addEventListener('click', spinAll);
 
-      if (volumeRange) {
-        volumeRange.addEventListener('input', () => {
-          player.volume = Number(volumeRange.value);
-        });
-      }
-      if (seekRange) {
-        player.addEventListener('timeupdate', () => {
-          const p = player.duration ? (player.currentTime / player.duration) * 100 : 0;
-          seekRange.value = Math.floor(p);
-        });
-        seekRange.addEventListener('input', () => {
-          if (player.duration) {
-            player.currentTime = (Number(seekRange.value) / 100) * player.duration;
+  /* ================= MUSIC ================= */
+  const player = document.getElementById('player');
+  const songTitleEl = document.getElementById('songTitle');
+  const volRange = document.getElementById('volRange');
+  const seekRange = document.getElementById('seekRange');
+
+  const BAD_TRACKS = new Set(); // permanent blacklist on fatal error
+  let LIBRARY = window.LIBRARY || [];
+  let bag = [];         // shuffle bag of indexes
+  let bagPos = -1;      // current position
+  let currentIndex = -1;
+
+  function prettyName(n){ return String(n || '').replace(/\.[a-z0-9]+$/i,''); }
+
+  function shuffle(a){
+    for (let i=a.length-1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function rebuildBag(){
+    const idx = [];
+    for (let i=0; i<LIBRARY.length; i++){
+      if (!BAD_TRACKS.has(LIBRARY[i].name)) idx.push(i);
+    }
+    shuffle(idx);
+    bag = idx;
+    bagPos = -1;
+  }
+
+  function updateSeekUI(){
+    if (!isFinite(player.duration) || player.duration <= 0){
+      seekRange.max = 0; seekRange.value = 0; return;
+    }
+    seekRange.max = player.duration;
+    seekRange.value = player.currentTime;
+  }
+  function resetSeekUI(){ seekRange.max = 0; seekRange.value = 0; }
+
+  volRange.addEventListener('input', () => player.volume = Number(volRange.value));
+  player.volume = Number(volRange.value);
+
+  player.addEventListener('timeupdate', updateSeekUI);
+  seekRange.addEventListener('input', () => {
+    if (isFinite(player.duration)) player.currentTime = Number(seekRange.value);
+  });
+
+  function isFatalAudioError(){
+    const err = player.error;
+    return !!(err && err.code && err.code !== 1); // 1 = MEDIA_ERR_ABORTED
+  }
+
+  async function playIndex(i, {loop=false, advanceBagOnSuccess=false} = {}){
+    if (i < 0 || i >= LIBRARY.length) return;
+    const tr = LIBRARY[i];
+    try{
+      player.onended = null;
+      player.loop = loop;
+      resetSeekUI();
+      player.src = tr.url;
+      player.load();
+      songTitleEl.textContent = "♪ " + prettyName(tr.name);
+      const p = player.play();
+      if (p && p.catch){
+        await p.catch((err) => {
+          if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')){
+            // Autoplay blocked or interrupted by user gesture changes
+            throw { _nonfatal: true, err };
           }
+          throw err;
         });
       }
-    }
-
-    function updateTicker(i) {
-      const tr = LIBRARY[i];
-      ticker.textContent = tr ? `Now Playing: ${tr.name}` : 'No track';
-    }
-
-    function playIndex(i, opts = {}) {
-      return new Promise((resolve, reject) => {
-        const tr = LIBRARY[i];
-        if (!tr) return reject(new Error('No track at index ' + i));
-
-        player.src = tr.url;
-        updateTicker(i);
-
-        const onPlay = () => {
-          player.removeEventListener('playing', onPlay);
-          resolve(true);
-        };
-        const onErr = (e) => {
-          player.removeEventListener('error', onErr);
-          console.warn('[audio] error on', tr.url, e);
-          BAD_TRACKS.add(tr.name);
-          reject(new Error('Play failed'));
-        };
-
-        player.addEventListener('playing', onPlay, { once: true });
-        player.addEventListener('error', onErr, { once: true });
-
-        const p = player.play();
-        if (p && typeof p.catch === 'function') {
-          p.catch(err => {
-            // Autoplay likely blocked
-            reject(err);
-          });
-        }
-      });
-    }
-
-    /* ==================== AUTOPLAY consent & random start ==================== */
-    async function tryStartRandomSong() {
-      if (!window.LIBRARY || !window.LIBRARY.length) return false;
-      if (!bag || !bag.length) rebuildBag();
-      const next = (bagPos + 1) % bag.length;
-      bagPos = next;
-      currentIndex = bag[next];
-      try {
-        await playIndex(currentIndex, { loop:false, advanceBagOnSuccess:true });
-        console.log('[audio] autoplay started:', LIBRARY[currentIndex]?.name);
-        return true;
-      } catch (e) {
-        console.warn('[audio] autoplay blocked or failed:', e);
-        return false;
+      currentIndex = i;
+      if (advanceBagOnSuccess){
+        const pos = bag.indexOf(i);
+        if (pos !== -1) bagPos = pos;
       }
+    } catch(e){
+      if (e && e._nonfatal) return;
+      if (isFatalAudioError()){
+        BAD_TRACKS.add(tr.name);
+      }
+      // try next
+      const next = (i+1) % LIBRARY.length;
+      if (next !== i) return playIndex(next, {loop, advanceBagOnSuccess});
     }
+  }
 
-    function showAudioConsentOverlay() {
-      const overlay = document.getElementById('audio-consent');
-      const btn = document.getElementById('audio-consent-btn');
-      if (!overlay || !btn) return;
+  function playRandomFromBag(){
+    if (!bag || !bag.length) rebuildBag();
+    const next = (bagPos + 1) % bag.length;
+    bagPos = next;
+    const target = bag[next];
+    return playIndex(target, { advanceBagOnSuccess:true });
+  }
 
-      overlay.style.display = 'flex'; // show only when needed
+  document.getElementById('prevBtn').addEventListener('click', () => {
+    if (!bag.length) return;
+    bagPos = (bagPos - 1 + bag.length) % bag.length;
+    playIndex(bag[bagPos], { advanceBagOnSuccess:false });
+  });
+  document.getElementById('nextBtn').addEventListener('click', () => {
+    playRandomFromBag();
+  });
+  document.getElementById('stopBtn').addEventListener('click', () => {
+    player.pause(); player.currentTime = 0;
+  });
+  document.getElementById('playPauseBtn').addEventListener('click', () => {
+    if (player.paused) player.play().catch(()=>{}); else player.pause();
+  });
 
-      const enable = async () => {
-        const ok = await tryStartRandomSong();
-        if (ok) {
-          localStorage.setItem('poem.audioConsent', '1');
-          overlay.style.display = 'none';
-        } else {
-          alert('Still blocked by the browser. Tap the ▶️ button once, then try again.');
-        }
-      };
-      btn.onclick = enable;
-
-      // Optional: clicking outside the card also enables
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) enable();
-      });
+  /* ====== SPECIAL SONG for the Special Poem ====== */
+  async function playIndexForSpecial(){
+    const special = { name: 'Sparks_For_Only_You.mp3', url: 'music/' + encodeURIComponent('Sparks_For_Only_You.mp3') };
+    try{
+      player.src = special.url; player.load();
+      songTitleEl.textContent = "♪ " + prettyName(special.name);
+      await player.play();
+    } catch(e){
+      console.warn('[audio] special track blocked, ignoring', e);
     }
+  }
 
-    async function attemptAutoplayOnOpen() {
-      // If user has previously consented, autoplay will likely succeed immediately
+  /* ====== AUTOPLAY: try on open, else show consent ====== */
+  async function tryStartRandomSong() {
+    if (!window.LIBRARY || !window.LIBRARY.length) return false;
+    try {
+      await playRandomFromBag();
+      return true;
+    } catch(e){
+      return false;
+    }
+  }
+  function showAudioConsentOverlay() {
+    const overlay = document.getElementById('audio-consent');
+    const btn = document.getElementById('audio-consent-btn');
+    if (!overlay || !btn) return;
+    overlay.style.display = 'flex';
+    const enable = async () => {
       const ok = await tryStartRandomSong();
-      if (!ok) showAudioConsentOverlay();
-    }
-
-    /* ==================== Poem logic (simple) ==================== */
-    function buildRings() {
-      // Keep your actual ring visuals if you have them; this is just a label filler
-      const el = document.getElementById('rings');
-      if (!el) return;
-      [...el.children].forEach((child, i) => {
-        child.textContent = `Ring ${i+1}`;
-      });
-    }
-
-    function generatePoem() {
-      // pick one line from each ring
-      const lines = RINGS.map(group => group[Math.floor(Math.random() * group.length)]);
-      // Final formatting: quoted, italic, with “— by Aramish”
-      return `“${lines[0]}”\n“${lines[1]}”\n“${lines[2]}”\n“${lines[3]}”\n“${lines[4]}” — by Aramish`;
-    }
-
-    function renderPoem(initial=false) {
-      const out = document.getElementById('finalPoem');
-      if (!out) return;
-      const text = generatePoem();
-      if (initial) {
-        out.textContent = text;
-        return;
+      if (ok) {
+        localStorage.setItem('poem.audioConsent', '1');
+        overlay.style.display = 'none';
+      } else {
+        alert('Still blocked by browser. Tap the ▶️ button once, then try again.');
       }
-      // simple line-by-line “magical” reveal
-      out.textContent = '';
-      const parts = text.split('\n');
-      let i = 0;
-      const tick = () => {
-        if (i >= parts.length) return;
-        out.textContent += (i ? '\n' : '') + parts[i++];
-        setTimeout(tick, 260);
-      };
-      tick();
-    }
+    };
+    btn.onclick = enable;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) enable();
+    });
+  }
+  async function attemptAutoplayOnOpen(){
+    const ok = await tryStartRandomSong();
+    if (!ok) showAudioConsentOverlay();
+  }
 
-    /*  ====== Build & start ========*/
-    buildRings();
-    renderPoem(true);
-    initVolume();
+  /* ====== INIT ====== */
+  buildStage();
+  renderPoem(true);
 
-    function waitForLibrary() {
-      if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
-      return new Promise((resolve) => {
-        let tries = 0;
-        const iv = setInterval(() => {
-          tries++;
-          if (window.LIBRARY && window.LIBRARY.length) {
-            clearInterval(iv);
-            resolve();
-          } else if (tries > 200) { // ~10s safety
-            clearInterval(iv);
-            resolve(); // proceed (will fallback if still empty)
-          }
-        }, 50);
-        window.addEventListener('musicReady', () => {
+  function waitForLibrary() {
+    if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
+    return new Promise((resolve) => {
+      let tries = 0;
+      const iv = setInterval(() => {
+        tries++;
+        if (window.LIBRARY && window.LIBRARY.length) {
           clearInterval(iv);
           resolve();
-        }, { once: true });
-      });
+        } else if (tries > 200) { // ~10s safety
+          clearInterval(iv);
+          resolve(); // proceed anyway (fallback will warn)
+        }
+      }, 50);
+      window.addEventListener('musicReady', () => {
+        clearInterval(iv);
+        resolve();
+      }, { once: true });
+    });
+  }
+
+  waitForLibrary().then(() => {
+    LIBRARY = window.LIBRARY || [];
+    if (!LIBRARY.length || LIBRARY.length <= 2){
+      const warn = document.getElementById('libWarn');
+      if (warn) warn.style.display = 'block';
+      console.warn('[music] library looks small; probably using fallback');
+    } else {
+      console.log('[music] library ready with', LIBRARY.length, 'tracks');
     }
+    rebuildBag();
+    seekRange.value = 0;
 
-    waitForLibrary().then(() => {
-      LIBRARY = window.LIBRARY || [];
-      if (!LIBRARY.length || LIBRARY.length <= 2) {
-        const warn = document.getElementById('libWarn');
-        if (warn) warn.style.display = 'block';
-        console.warn('[music] library looks small; probably using fallback');
-      } else {
-        console.log('[music] library ready with', LIBRARY.length, 'tracks');
-      }
-      rebuildBag();
-      seekRange.value = 0;
+    // Try to autoplay once library is ready
+    attemptAutoplayOnOpen();
+  });
 
-      // Try autoplay on open (shows consent sheet if blocked)
-      attemptAutoplayOnOpen();
+  /* ===== Hidden special test: Shift+S (and invisible button) ===== */
+  document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
+  document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
+  function generateSpecialPoem(){
+    // These indexes must match the specialConditions lines above
+    const picks = [0, 1, 2, 1, 2];
+    picks.forEach((idx, i) => {
+      stacks[i].currentIndex = idx;
+      stacks[i].span.textContent = stacks[i].options[idx];
     });
-
-    /* Spin button → new poem */
-    document.getElementById('spinBtn')?.addEventListener('click', () => {
-      renderPoem(false);
-    });
+    renderPoem(true);
+    playIndexForSpecial();
+  }
   </script>
 </body>
 </html>
