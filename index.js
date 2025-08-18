@@ -10,15 +10,20 @@
 
   async function loadLibrary() {
     try {
-      const res = await fetch(TRACKS_URL, { cache: 'no-cache' });
+      // cache-bust to ensure we always fetch the latest manifest
+      const res = await fetch(TRACKS_URL + '?v=' + Date.now(), { cache: 'no-cache' });
       if (!res.ok) throw new Error('tracks.json HTTP ' + res.status);
+
       const arr = await res.json();
       const files = Array.isArray(arr) ? arr : [];
       const lib = files
         .map(toEntry)
         .filter(e => e.name && /\.mp3(\?.*)?$/i.test(e.name));
+
       if (!lib.length) throw new Error('Empty manifest');
-      window.LIBRARY = libOrFallbackArray;
+
+      // ✅ FIX: assign the actual `lib`, not a non-existent variable
+      window.LIBRARY = lib;
       console.log('[music] loaded', lib.length, 'tracks from tracks.json');
     } catch (err) {
       console.warn('[music] failed to load tracks.json; using minimal fallback', err);
@@ -27,9 +32,10 @@
         toEntry('Lofi Jazz-1.mp3')
       ];
     }
+
+    // Signal ready to index.html
     window.musicReady = Promise.resolve(true);
     window.dispatchEvent(new Event('musicReady'));
-
   }
 
   window.musicReady = loadLibrary();
