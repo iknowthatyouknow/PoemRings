@@ -2,72 +2,54 @@
 <html lang="en">
 <head>
   <!-- Load the library loader FIRST (cache-busted) -->
-  <script src="index.js?v=7" defer></script>
+  <script src="index.js?v=9" defer></script>
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Poem Rings — v44 (reorder + no-repeat shuffle)</title>
+  <title>For Only You</title>
   <style>
     :root{
       --spin-duration: 1200ms;
-      --stair-fraction: 0.25;   /* each next ring starts at 25% of animation */
-      --line-stagger: 300ms;     /* line-by-line reveal timing */
+      --stair-fraction: 0.25;
+      --line-stagger: 300ms;
       --line-fade-dur: 1200ms;
 
       --ring-width: 760px;
       --ring-height: 76px;
-
-      --bg: #0b1120;
-      --panel: #0c1426;
-      --panel-2: #0a1220;
-      --card: #0e1729;
-      --rim:  #0f1a31;
-
-      --text: #e5ecff;
-      --muted: #b6c1d6;
-      --drag-handle: #7fb3ff;
-      --drop-hint: rgba(127,179,255,.25);
-
+      --bg-1: #0e1117;
+      --bg-2: #0b0e14;
+      --panel: #121826;
+      --panel-2: #141b2a;
+      --stroke: #263047;
+      --glow: rgba(0,0,0,.3);
+      --text: #e8ecf4;
+      --muted: #aeb7c8;
       --special: #ffd166;
-      --accent: #7bdff6;
-
-      --border: #202a3f;
-      --inset: #1a2235;
+      --btn: #1b2333;
+      --btn-hover: #202a3f;
+      --drag-handle: #8aa0c9;
+      --drop-hint: #3357ff55;
     }
 
-    html, body { margin:0; padding:0; background:var(--bg); color:var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-
-    .wrap{ max-width:1100px; margin: 26px auto 64px; padding: 0 16px; }
-
-    header{ display:flex; align-items:center; justify-content:space-between; gap: 12px;
-      background: linear-gradient(180deg, #0e1628, #0b1120); border:1px solid var(--border);
-      border-radius: 14px; padding: 10px 12px; box-shadow: inset 0 0 0 1px #1b2440; }
-    header h1{ margin:0; font-size: 18px; letter-spacing:.3px; color:#d9e6ff; }
-    header .controls{ display:flex; gap:10px; flex-wrap:wrap; }
-
-    button{
-      appearance: none; cursor: pointer;
-      border:1px solid var(--border);
-      background: linear-gradient(180deg, #101a34, #0d1427);
-      color: var(--text); border-radius: 10px; padding: 9px 12px; font-weight: 700;
-      transition: transform .08s ease, border-color .2s ease, box-shadow .2s ease;
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans";
+      -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #161a23 0%, #0e121a 50%, #090b10 100%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 18px;
     }
-    button:hover{ transform: translateY(-1px); border-color:#2a3753;
-      box-shadow: 0 10px 22px rgba(0,0,0,.30); }
-    button:active{ transform: translateY(0); }
 
-    .layout{ display:grid; grid-template-columns: 1.3fr .7fr; gap:16px; margin-top:16px; }
-    @media (max-width: 980px){ .layout{ grid-template-columns: 1fr; } }
+    .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
+    .stage{ display: grid; gap: 14px; perspective: 1000px; }
 
-    .left, .right{ background: linear-gradient(180deg, #0e1628, #0c1426);
-      border:1px solid var(--border); border-radius: 16px; padding: 14px;
-      box-shadow: inset 0 0 0 1px #1a2237, 0 14px 28px rgba(0,0,0,.28); }
-
-    .section-title{ margin: 0 0 10px; color: #9fb2d6; font-size: 13px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; }
-
-    /* RINGS */
-    .stage{ width: min(100%, var(--ring-width)); margin: 0 auto; display:grid; gap: 10px; }
     .ring{ position: relative; width: 100%; height: var(--ring-height);
            display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
     .drag-handle{
@@ -98,16 +80,32 @@
       content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
     }
     .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
-    .ring.drop-after::after { bottom:-6px; border-radius:0 0 6px 6px; }
+    .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
 
-    .ring span{
-      font-size: clamp(16px, 1.6vw, 20px); color:#cfe3ff; transform: translateZ(0.2px);
+    .card > span{ display:block; width: 100%; white-space: normal;
+                  font-size: clamp(14px, 1.75vw, 18px); }
+
+    @keyframes spinSmooth { from { transform: rotateY(0deg) translateZ(0.1px); }
+                            to   { transform: rotateY(360deg) translateZ(0.1px); } }
+    .spinning { animation: spinSmooth var(--spin-duration) linear; }
+
+    .controls{ display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap: wrap; }
+    button{
+      background: var(--btn); color: var(--text); border: 1px solid #2b3449;
+      padding: 10px 16px; border-radius: 12px; cursor: pointer; font-weight: 700; letter-spacing: .2px;
+      transition: transform .06s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease;
+      display: inline-flex; align-items: center; gap: 8px;
     }
+    button:hover{ background:var(--btn-hover); border-color:#35415a; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    button:active{ transform: translateY(1px); }
 
-    /* POEM box */
-    .poem{ margin-top: 16px; background: linear-gradient(180deg, #0f172a, #0d1426);
-      border: 1px solid #222c42; border-radius: 16px; padding: 14px;
-      box-shadow: inset 0 0 0 1px #1b2440; }
+    .tips{ color: var(--muted); font-size: 13px; text-align:center; margin-top: -6px; }
+
+    .poem{
+      background: linear-gradient(180deg, #101522, #0f1522);
+      border: 1px solid #21283a; border-radius: 14px; padding: 14px 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
+    }
     .poem-header{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px; }
     .poem h2{ margin: 0; font-size: 1rem; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
     .special-badge{
@@ -117,7 +115,7 @@
       padding: 5px 10px; font-size: .88rem; font-weight: 700;
       filter: drop-shadow(0 0 6px rgba(255,209,102,.35));
     }
-    .poem .quote{ text-align:center; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.35; white-space: pre-wrap; }
+    .poem .quote{ text-align:center; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.35; }
     .poem .byline{ margin-top: 6px; text-align:center; color: var(--muted); font-size: .95rem; font-style: italic; }
 
     .line { opacity: 0; transform: translateY(6px);
@@ -125,7 +123,6 @@
     @keyframes lineFade { from { opacity: 0; transform: translateY(6px); }
                           to   { opacity: 1; transform: translateY(0); } }
 
-    /* MUSIC player */
     .music {
       display: grid; gap: 12px;
       background: linear-gradient(180deg, #0f1522, #0d1421);
@@ -139,19 +136,17 @@
     }
     .ticker__inner { display:inline-block; white-space: nowrap; padding-left:100%;
                      animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
-    @keyframes slide {
-      0% { transform: translateX(0); }
-      100% { transform: translateX(-100%); }
+    @keyframes slide { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+
+    .player-row{
+      display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+      background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 12px;
     }
+    .seek{ display:flex; align-items:center; gap:10px; flex:1; }
+    .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
+    .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
 
-    .controls button{ font-size: 16px; padding: 8px 10px; }
-    .seek{ display:flex; align-items:center; gap:8px; }
-    input[type="range"]{ accent-color: var(--accent); }
-
-    /* Library fallback notice (optional) */
-    #libWarn{ display:none; color:#ffb703; text-align:center; margin-top:6px; font-size:13px; }
-
-    /* One-time audio consent overlay — starts hidden! (JS will show if autoplay is blocked) */
+    /* One-time audio consent overlay — starts hidden; shown only if autoplay blocked */
     #audio-consent{
       display:none; position:fixed; inset:0;
       background: rgba(0,0,0,.7); backdrop-filter: blur(2px);
@@ -162,12 +157,11 @@
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
 
-    /* Accessible, hidden button (for special test) */
-    .sr-only{ position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
+    #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
   </style>
 </head>
 <body>
-  <!-- One-time audio consent overlay (only shown if autoplay is blocked) -->
+  <!-- One-time audio consent overlay (only displayed if autoplay is blocked) -->
   <div id="audio-consent">
     <div class="card">
       <h2 style="margin:0 0 8px;">Enable sound?</h2>
@@ -176,447 +170,423 @@
     </div>
   </div>
 
+  <!-- Hidden special-test button (also Shift+S) -->
+  <button id="testSpecialBtn" aria-label="Generate special poem">hidden</button>
+
   <div class="wrap">
-    <header>
-      <h1>Poem Rings</h1>
-      <div class="controls">
-        <button id="spinBtn">✨ Create Your Next Poem</button>
-        <button id="copyBtn">📋 Copy poem</button>
-        <button id="testSpecialBtn" class="sr-only" aria-hidden="true" tabindex="-1">Trigger Special</button>
+    <div class="stage" id="stage"></div>
+    <div class="tips">Drag the ⋮⋮ handle to reorder rings (top = first line)</div>
+
+    <div class="controls">
+      <button id="spinBtn">✨ Create Your Next Poem</button>
+      <button id="copyBtn">📋 Copy poem</button>
+    </div>
+
+    <div class="poem" id="poemBox" aria-live="polite">
+      <div class="poem-header">
+        <h2>Current Poem</h2>
+        <!-- Special badge is injected dynamically only when matched -->
       </div>
-    </header>
+      <div id="poemFormatted" class="quote"></div>
+      <div class="byline">~ by Aramish</div>
+    </div>
 
-    <div class="layout">
-      <!-- LEFT: Rings + Poem -->
-      <div class="left">
-        <h3 class="section-title">Arrange Rings</h3>
-        <div id="stage" class="stage" aria-label="Reorder poem rings"></div>
-
-        <div class="poem" id="poemBox" aria-live="polite">
-          <div class="poem-header">
-            <h2>Current Poem</h2>
-            <!-- Special badge injects here when matched -->
-          </div>
-          <div id="poemFormatted" class="quote"></div>
-          <div class="byline">~ by Aramish</div>
+    <section class="music" aria-label="Music player">
+      <div class="music-row">
+        <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
+        <div class="controls">
+          <button id="prevBtn" title="Previous">⏮️</button>
+          <button id="playPauseBtn" title="Play/Pause">⏯️</button>
+          <button id="stopBtn" title="Stop">⏹️</button>
+          <button id="nextBtn" title="Next">⏭️</button>
+          <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#aeb7c8;">
+            Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
+          </label>
         </div>
-
-        <div id="libWarn">⚠️ Couldn’t load the full music library; using a tiny fallback list.</div>
       </div>
 
-      <!-- RIGHT: Music -->
-      <div class="right">
-        <h3 class="section-title">Music</h3>
-        <div class="music">
-          <div class="music-row">
-            <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
-            <div class="controls">
-              <button id="prevBtn" title="Previous">⏮️</button>
-              <button id="playPauseBtn" title="Play/Pause">⏯️</button>
-              <button id="stopBtn" title="Stop">⏹️</button>
-              <button id="nextBtn" title="Next">⏭️</button>
-              <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#aeb7c8;">
-                Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
-              </label>
-            </div>
-          </div>
-
-          <div class="player-row">
-            <div class="seek">
-              <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
-              <audio id="player" preload="none" crossorigin="anonymous"></audio>
-            </div>
-          </div>
+      <div class="player-row">
+        <div class="seek">
+          <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
         </div>
-      </div> <!-- /right -->
-    </div> <!-- /layout -->
-  </div> <!-- /wrap -->
+        <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
+      </div>
 
-  <script>
-  /* ================== DATA (v44 rings) ================== */
-  const RINGS_DATA = [
-    [
-      "Strength in Silence",
-      "Grace Without Seeking, Calm in a Storm",
-      "The World Bends Gentler Near her Soul",
-      "She is Proof That Kindness is a Force"
-    ],
-    [
-      "Hope Carried in Quiet Hands",
-      "Stillness that softens the Sharpest Edge",
-      "She Listens Where Most Would Speak",
-      "And Builds with the Weight of Care"
-    ],
-    [
-      "She Moves Like Morning Light",
-      "Patience Carved into the Day",
-      "Every Step Writes Peace in Stone",
-      "Her Silence Steadies The Storm"
-    ],
-    [
-      "Gentle As the Breath Before Dawn",
-      "Her Voice Mends What Fear Has Broken",
-      "Fire Wrapped in Grace",
-      "Kindness Carved into Motion"
-    ],
-    [
-      "Dream in the Dawn",
-      "Truth Without Armor, Steady in Light",
-      "The Horizon Waits for Her Journey",
-      "She is Proof That Fate Wears Many Faces"
-    ]
-  ];
+      <audio id="player" preload="auto"></audio>
+    </section>
+  </div>
 
-  /* ========= STATE ========= */
-  let stacks = [];          // [{id, options[], currentIndex, card, span, el }, ...]
-  let order = [0,1,2,3,4];  // ring order indexes
+<script>
+/* ======== POEMS: 5 rings × 4 lines ======== */
+const RINGS_DATA = [
+  ["Strength in Silence,","Grace Without Seeking, Calm in a Storm,","The World Bends Gentler Near her Soul","She is Proof That Kindness is a Force"],
+  ["Hope Carried in Quiet Hands,","Stillness that softens the Sharpest Edge,","She Listens Where Most Would Speak","And Builds with the Weight of Care"],
+  ["She Moves Like Morning Light,","Patience Carved into the Day,","Every Step Writes Peace in Stone","Her Silence Steadies The Storm"],
+  ["Gentle As the Breath Before Dawn,","Her Voice Mends What fear has Broken,","Fire Wrapped in Grace,","Kindness Carved into Motion"],
+  ["Dream in the Dawn,","Truth Without Armor, Steady in Light","The Horizon Waits for her Journey","She is Proof That Fate Wears Many Faces"]
+];
+// Reorderable stacks
+let stacks = [];  // [{id, options:[...], currentIndex, card, span, el}]
 
-  /* ======= BUILD STAGE / RINGS ======= */
-  const stage = document.getElementById('stage');
+/* ---- SPECIAL POEM (strict) ---- */
+function normalizeLineStrict(s){
+  return String(s || "")
+    .replace(/[“”"']/g, "")
+    .replace(/\s*[,;:!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+function isSpecialPoem(){
+  const now = currentLines().map(normalizeLineStrict);
+  return now.length === 5 &&
+         now[0] === "strength in silence" &&
+         now[1] === "stillness that softens the sharpest edge" &&
+         now[2] === "every step writes peace in stone" &&
+         now[3] === "her voice mends what fear has broken" &&
+         now[4] === "the horizon waits for her journey";
+}
+const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
 
-  function buildStage(){
-    stage.innerHTML = '';
-    stacks = [];
-    for (let i=0; i<RINGS_DATA.length; i++){
-      const el = document.createElement('div');
-      el.className = 'ring';
-      el.draggable = true;
-      el.dataset.id = i;
+/* ======== MUSIC (library supplied by index.js) ======== */
+const MUSIC_DIR = "music/";
+const BAD_TRACKS = new Set(); // fatal-only blacklist
+let LIBRARY = window.LIBRARY || [];
+let bag = [], bagPos = -1, currentIndex = -1;
 
-      const drag = document.createElement('div');
-      drag.className = 'drag-handle';
-      drag.title = 'Drag to reorder';
-      drag.textContent = '↕';
+function fisherYatesShuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); fisherYatesShuffle(bag); bagPos=-1; }
+function nextFromBag(){ if (!bag.length) rebuildBag(); bagPos++; if (bagPos>=bag.length){ rebuildBag(); bagPos=0; } return bag[bagPos]; }
+function prevFromBag(){ if (!bag.length) rebuildBag(); bagPos--; if (bagPos<0){ rebuildBag(); bagPos=bag.length-1; } return bag[bagPos]; }
 
-      const card = document.createElement('div');
-      card.className = 'card';
+/* ======== DOM ======== */
+const stage = document.getElementById('stage');
+const songTitleEl = document.getElementById('songTitle');
+const player = document.getElementById('player');
+const volRange = document.getElementById('volRange');
+const playPauseBtn = document.getElementById('playPauseBtn');
+const stopBtn = document.getElementById('stopBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const seekRange = document.getElementById('seekRange');
+const curTimeEl = document.getElementById('curTime');
+const durTimeEl = document.getElementById('durTime');
 
-      const span = document.createElement('span');
-      span.textContent = RINGS_DATA[i][0];
-      card.appendChild(span);
+/* ======== Build Reorderable Rings ======== */
+function buildRings(){
+  stage.innerHTML = "";
+  stacks = [];
+  for (let i = 0; i < RINGS_DATA.length; i++){
+    const el = document.createElement('div');
+    el.className = 'ring';
+    el.draggable = true;
+    el.dataset.idx = String(i); // base id
 
-      el.appendChild(drag);
-      el.appendChild(card);
-      stage.appendChild(el);
+    const drag = document.createElement('div');
+    drag.className = 'drag-handle';
+    drag.title = "Drag to reorder";
+    drag.textContent = "⋮⋮";
 
-      stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
-    }
-    wireDragAndDrop();
+    const card = document.createElement('div'); card.className = 'card';
+    const span = document.createElement('span'); span.textContent = RINGS_DATA[i][0];
+    card.appendChild(span);
+
+    el.appendChild(drag);
+    el.appendChild(card);
+    stage.appendChild(el);
+
+    stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
   }
+  wireDragAndDrop();
+}
 
-  function wireDragAndDrop(){
-    let dragSrc = null;
-    stage.querySelectorAll('.ring').forEach(ring => {
-      ring.addEventListener('dragstart', (e) => {
-        dragSrc = ring;
-        e.dataTransfer.effectAllowed = 'move';
-        ring.classList.add('drag-over');
-      });
-      ring.addEventListener('dragend', () => {
-        stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-        dragSrc = null;
-      });
-      ring.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        const rect = ring.getBoundingClientRect();
-        const midY = rect.top + rect.height/2;
-        ring.classList.add('drag-over');
-        ring.classList.toggle('drop-before', e.clientY < midY);
-        ring.classList.toggle('drop-after',  e.clientY >= midY);
-      });
-      ring.addEventListener('drop', (e) => {
-        e.preventDefault();
-        if (!dragSrc || dragSrc === ring) return;
-        const before = ring.classList.contains('drop-before');
-        stage.insertBefore(dragSrc, before ? ring : ring.nextSibling);
-        // recompute order
-        order = [...stage.querySelectorAll('.ring')].map(el => Number(el.dataset.id));
-        renderPoem(true);
-      });
+function wireDragAndDrop(){
+  let dragSrc = null;
+  stage.querySelectorAll('.ring').forEach(ring => {
+    ring.addEventListener('dragstart', (e) => {
+      dragSrc = ring;
+      e.dataTransfer.effectAllowed = 'move';
+      ring.classList.add('drag-over');
     });
-  }
-
-  /* ======= POEM RENDER ======= */
-  function renderPoem(initial=false){
-    const lines = order.map((ringIdx, i) => {
-      const s = stacks[ringIdx];
-      return s.options[s.currentIndex];
+    ring.addEventListener('dragend', () => {
+      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+      dragSrc = null;
     });
+    ring.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
+      ring.classList.add('drag-over');
+      ring.classList.toggle('drop-before', e.clientY < midY);
+      ring.classList.toggle('drop-after',  e.clientY >= midY);
+      e.dataTransfer.dropEffect = 'move';
+    });
+    ring.addEventListener('dragleave', () => {
+      ring.classList.remove('drop-before','drop-after');
+    });
+    ring.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === ring) return;
 
-    const out = document.getElementById('poemFormatted');
-    out.innerHTML = ''; // reset
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
+      const dropBefore = e.clientY < midY;
 
-    // Special poem badge logic
-    const specialConditions = [
-      "Strength in Silence",
-      "Stillness that softens the Sharpest Edge",
-      "Every Step Writes Peace in Stone",
-      "Her Voice Mends What Fear Has Broken",
-      "The Horizon Waits for Her Journey"
-    ];
-    const isSpecial = lines[0]===specialConditions[0] &&
-                      lines[1]===specialConditions[1] &&
-                      lines[2]===specialConditions[2] &&
-                      lines[3]===specialConditions[3] &&
-                      lines[4]===specialConditions[4];
+      // Reorder DOM
+      if (dropBefore) stage.insertBefore(dragSrc, ring);
+      else            stage.insertBefore(dragSrc, ring.nextSibling);
 
-    const header = document.querySelector('.poem-header');
-    header.querySelectorAll('.special-badge')?.forEach(n=>n.remove());
-    if (isSpecial){
-      const badge = document.createElement('div');
+      // Rebuild stacks array in new DOM order, preserving state
+      const newStacks = [];
+      stage.querySelectorAll('.ring').forEach(row => {
+        const found = stacks.find(s => s.el === row);
+        if (found) newStacks.push(found);
+      });
+      stacks = newStacks;
+
+      // Clean hints
+      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+    });
+  });
+}
+
+/* ======== Current lines & rendering ======== */
+function currentLines(){ return stacks.map(s => s.options[s.currentIndex]); }
+
+function setSpecialBadge(active){
+  const header = document.querySelector('.poem-header');
+  let badge = document.getElementById('specialBadge');
+  if (active){
+    if (!badge){
+      badge = document.createElement('span');
+      badge.id = 'specialBadge';
       badge.className = 'special-badge';
-      badge.innerHTML = '⭐ Special Poem';
+      badge.innerHTML = '<span class="star">✨</span> Special Poem';
       header.appendChild(badge);
-      playIndexForSpecial();
     }
-
-    // line-by-line reveal
-    lines.forEach((line, idx) => {
-      const span = document.createElement('div');
-      span.className = 'line';
-      span.style.animationDelay = `calc(${idx} * var(--line-stagger))`;
-      span.textContent = `“${line}”`;
-      out.appendChild(span);
-    });
+  } else if (badge) badge.remove();
+}
+function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderPoem(animated=false){
+  const lines = currentLines();
+  const quote = document.getElementById('poemFormatted');
+  if (!animated){
+    quote.innerHTML = '<em>"' + lines.map(escapeHTML).join('<br>') + '"</em>';
+  } else {
+    const stagger = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line-stagger')) || 300;
+    let html = '<em>"';
+    for (let i=0;i<lines.length;i++){
+      html += `<span class="line" style="animation-delay:${i*stagger}ms">${escapeHTML(lines[i])}</span>`;
+      if (i < lines.length-1) html += '<br>';
+    }
+    html += '"</em>';
+    quote.innerHTML = html;
   }
+  setSpecialBadge(isSpecialPoem());
+}
 
-  /* ======= COPY ======= */
-  document.getElementById('copyBtn').addEventListener('click', async () => {
-    const text = [...document.querySelectorAll('#poemFormatted .line')]
-      .map(n => n.textContent).join('\n') + '\n~ by Aramish';
-    try{
-      await navigator.clipboard.writeText(text);
-      alert('Poem copied to clipboard!');
-    }catch(e){
-      prompt('Copy the poem:', text);
-    }
+/* ======== Spin logic (stair) ======== */
+function parseTimeToMs(val){ if (!val) return 0; if (val.endsWith('ms')) return parseFloat(val); if (val.endsWith('s')) return parseFloat(val)*1000; return parseFloat(val)||0; }
+function startSpin(card){ card.classList.remove('spinning'); void card.offsetWidth; card.classList.add('spinning'); }
+function stopSpin(card){ card.classList.remove('spinning'); }
+
+function unlockAudioOnce(){
+  if (player._unlocked) return;
+  try {
+    player.volume = Number(volRange.value || 0.6);
+    const p = player.play();
+    if (p && p.then){
+      p.then(() => { player.pause(); player.currentTime = 0; player._unlocked = true; })
+       .catch(() => { player._unlocked = true; });
+    } else { player._unlocked = true; }
+  } catch { player._unlocked = true; }
+}
+
+function spinStair(){
+  unlockAudioOnce();
+
+  const spinDur = parseTimeToMs(getComputedStyle(document.documentElement).getPropertyValue('--spin-duration').trim());
+  const offset = spinDur * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stair-fraction') || 0.25);
+  const nextIndices = stacks.map(s => Math.floor(Math.random() * s.options.length));
+  const lastMidSwapTime = (stacks.length - 1) * offset + spinDur * 0.5;
+
+  stacks.forEach((s, idx) => {
+    const startDelay = idx * offset;
+    setTimeout(() => startSpin(s.card), startDelay);
+    setTimeout(() => { s.currentIndex = nextIndices[idx]; s.span.textContent = s.options[nextIndices[idx]]; }, startDelay + spinDur * 0.5);
+    setTimeout(() => stopSpin(s.card), startDelay + spinDur + 20);
   });
 
-  /* ======= RING SPIN (next lines) ======= */
-  function spinAll(){
-    stacks.forEach((s, i) => {
-      s.currentIndex = (s.currentIndex + 1) % s.options.length;
-      s.span.textContent = s.options[s.currentIndex];
-    });
-    renderPoem(false);
-    // also pick a new random track each spin (if you want)
-    playRandomFromBag();
-  }
-  document.getElementById('spinBtn').addEventListener('click', spinAll);
-
-  /* ================= MUSIC ================= */
-  const player = document.getElementById('player');
-  const songTitleEl = document.getElementById('songTitle');
-  const volRange = document.getElementById('volRange');
-  const seekRange = document.getElementById('seekRange');
-
-  const BAD_TRACKS = new Set(); // permanent blacklist on fatal error
-  let LIBRARY = window.LIBRARY || [];
-  let bag = [];         // shuffle bag of indexes
-  let bagPos = -1;      // current position
-  let currentIndex = -1;
-
-  function prettyName(n){ return String(n || '').replace(/\.[a-z0-9]+$/i,''); }
-
-  function shuffle(a){
-    for (let i=a.length-1; i>0; i--){
-      const j = Math.floor(Math.random()*(i+1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
-  function rebuildBag(){
-    const idx = [];
-    for (let i=0; i<LIBRARY.length; i++){
-      if (!BAD_TRACKS.has(LIBRARY[i].name)) idx.push(i);
-    }
-    shuffle(idx);
-    bag = idx;
-    bagPos = -1;
-  }
-
-  function updateSeekUI(){
-    if (!isFinite(player.duration) || player.duration <= 0){
-      seekRange.max = 0; seekRange.value = 0; return;
-    }
-    seekRange.max = player.duration;
-    seekRange.value = player.currentTime;
-  }
-  function resetSeekUI(){ seekRange.max = 0; seekRange.value = 0; }
-
-  volRange.addEventListener('input', () => player.volume = Number(volRange.value));
-  player.volume = Number(volRange.value);
-
-  player.addEventListener('timeupdate', updateSeekUI);
-  seekRange.addEventListener('input', () => {
-    if (isFinite(player.duration)) player.currentTime = Number(seekRange.value);
-  });
-
-  function isFatalAudioError(){
-    const err = player.error;
-    return !!(err && err.code && err.code !== 1); // 1 = MEDIA_ERR_ABORTED
-  }
-
-  async function playIndex(i, {loop=false, advanceBagOnSuccess=false} = {}){
-    if (i < 0 || i >= LIBRARY.length) return;
-    const tr = LIBRARY[i];
-    try{
-      player.onended = null;
-      player.loop = loop;
-      resetSeekUI();
-      player.src = tr.url;
-      player.load();
-      songTitleEl.textContent = "♪ " + prettyName(tr.name);
-      const p = player.play();
-      if (p && p.catch){
-        await p.catch((err) => {
-          if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')){
-            // Autoplay blocked or interrupted by user gesture changes
-            throw { _nonfatal: true, err };
-          }
-          throw err;
-        });
-      }
-      currentIndex = i;
-      if (advanceBagOnSuccess){
-        const pos = bag.indexOf(i);
-        if (pos !== -1) bagPos = pos;
-      }
-    } catch(e){
-      if (e && e._nonfatal) return;
-      if (isFatalAudioError()){
-        BAD_TRACKS.add(tr.name);
-      }
-      // try next
-      const next = (i+1) % LIBRARY.length;
-      if (next !== i) return playIndex(next, {loop, advanceBagOnSuccess});
-    }
-  }
-
-  function playRandomFromBag(){
-    if (!bag || !bag.length) rebuildBag();
-    const next = (bagPos + 1) % bag.length;
-    bagPos = next;
-    const target = bag[next];
-    return playIndex(target, { advanceBagOnSuccess:true });
-  }
-
-  document.getElementById('prevBtn').addEventListener('click', () => {
-    if (!bag.length) return;
-    bagPos = (bagPos - 1 + bag.length) % bag.length;
-    playIndex(bag[bagPos], { advanceBagOnSuccess:false });
-  });
-  document.getElementById('nextBtn').addEventListener('click', () => {
-    playRandomFromBag();
-  });
-  document.getElementById('stopBtn').addEventListener('click', () => {
-    player.pause(); player.currentTime = 0;
-  });
-  document.getElementById('playPauseBtn').addEventListener('click', () => {
-    if (player.paused) player.play().catch(()=>{}); else player.pause();
-  });
-
-  /* ====== SPECIAL SONG for the Special Poem ====== */
-  async function playIndexForSpecial(){
-    const special = { name: 'Sparks_For_Only_You.mp3', url: 'music/' + encodeURIComponent('Sparks_For_Only_You.mp3') };
-    try{
-      player.src = special.url; player.load();
-      songTitleEl.textContent = "♪ " + prettyName(special.name);
-      await player.play();
-    } catch(e){
-      console.warn('[audio] special track blocked, ignoring', e);
-    }
-  }
-
-  /* ====== AUTOPLAY: try on open, else show consent ====== */
-  async function tryStartRandomSong() {
-    if (!window.LIBRARY || !window.LIBRARY.length) return false;
-    try {
-      await playRandomFromBag();
-      return true;
-    } catch(e){
-      return false;
-    }
-  }
-  function showAudioConsentOverlay() {
-    const overlay = document.getElementById('audio-consent');
-    const btn = document.getElementById('audio-consent-btn');
-    if (!overlay || !btn) return;
-    overlay.style.display = 'flex';
-    const enable = async () => {
-      const ok = await tryStartRandomSong();
-      if (ok) {
-        localStorage.setItem('poem.audioConsent', '1');
-        overlay.style.display = 'none';
-      } else {
-        alert('Still blocked by browser. Tap the ▶️ button once, then try again.');
-      }
-    };
-    btn.onclick = enable;
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) enable();
-    });
-  }
-  async function attemptAutoplayOnOpen(){
-    const ok = await tryStartRandomSong();
-    if (!ok) showAudioConsentOverlay();
-  }
-
-  /* ====== INIT ====== */
-  buildStage();
-  renderPoem(true);
-
-  function waitForLibrary() {
-    if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
-    return new Promise((resolve) => {
-      let tries = 0;
-      const iv = setInterval(() => {
-        tries++;
-        if (window.LIBRARY && window.LIBRARY.length) {
-          clearInterval(iv);
-          resolve();
-        } else if (tries > 200) { // ~10s safety
-          clearInterval(iv);
-          resolve(); // proceed anyway (fallback will warn)
-        }
-      }, 50);
-      window.addEventListener('musicReady', () => {
-        clearInterval(iv);
-        resolve();
-      }, { once: true });
-    });
-  }
-
-  waitForLibrary().then(() => {
-    LIBRARY = window.LIBRARY || [];
-    if (!LIBRARY.length || LIBRARY.length <= 2){
-      const warn = document.getElementById('libWarn');
-      if (warn) warn.style.display = 'block';
-      console.warn('[music] library looks small; probably using fallback');
-    } else {
-      console.log('[music] library ready with', LIBRARY.length, 'tracks');
-    }
-    rebuildBag();
-    seekRange.value = 0;
-
-    // Try to autoplay once library is ready
-    attemptAutoplayOnOpen();
-  });
-
-  /* ===== Hidden special test: Shift+S (and invisible button) ===== */
-  document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
-  document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
-  function generateSpecialPoem(){
-    // These indexes must match the specialConditions lines above
-    const picks = [0, 1, 2, 1, 2];
-    picks.forEach((idx, i) => {
-      stacks[i].currentIndex = idx;
-      stacks[i].span.textContent = stacks[i].options[idx];
-    });
+  setTimeout(async () => {
     renderPoem(true);
-    playIndexForSpecial();
+    if (isSpecialPoem()){
+      await playIndexForSpecial();
+    } else {
+      const idx = nextFromBag();
+      if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true});
+    }
+  }, lastMidSwapTime + 60);
+}
+
+/* ======== Music player (simple) ======== */
+function prettyName(filename){ return String(filename).replace(/\.[^/.]+$/,"").replace(/_/g," ").replace(/-/g," ").trim(); }
+function formatTime(t){ if (!isFinite(t)) return "0:00"; const m = Math.floor(t/60), s = Math.floor(t%60); return m + ":" + String(s).padStart(2,"0"); }
+function resetSeekUI(){ seekRange.value = 0; seekRange.max = 0; curTimeEl.textContent = "0:00"; durTimeEl.textContent = "0:00"; }
+function updatePlayStateUI(){ playPauseBtn.textContent = player.paused ? "▶️" : "⏸️"; }
+function isFatalAudioError(){ const c = player.error && player.error.code; return c === 3 || c === 4; }
+
+async function playIndex(i, {loop=false, advanceBagOnSuccess=false} = {}){
+  if (i < 0 || i >= LIBRARY.length) return;
+  const tr = LIBRARY[i];
+  try{
+    player.onended = null;
+    player.loop = loop;
+    resetSeekUI();
+    player.src = tr.url;
+    player.load();
+    songTitleEl.textContent = "♪ " + prettyName(tr.name);
+    const p = player.play();
+    if (p && p.catch){
+      await p.catch((err) => {
+        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')){
+          updatePlayStateUI();
+          throw { _nonfatal: true, err };
+        }
+        throw err;
+      });
+    }
+    currentIndex = i;
+    updatePlayStateUI();
+    if (advanceBagOnSuccess){
+      const pos = bag.indexOf(i);
+      if (pos !== -1) bagPos = pos;
+    }
+  } catch(e){
+    if (e && e._nonfatal) return;
+    if (isFatalAudioError()){
+      BAD_TRACKS.add(tr.name);
+      rebuildBag();
+      const nxt = nextFromBag();
+      if (typeof nxt === 'number'){ await playIndex(nxt, {loop, advanceBagOnSuccess:true}); return; }
+    }
+    songTitleEl.textContent = "Audio error.";
   }
-  </script>
+}
+async function playIndexForSpecial(){
+  try{
+    resetSeekUI();
+    player.onended = null;
+    player.loop = true;
+    player.src = SPECIAL_TRACK.url;
+    player.load();
+    songTitleEl.textContent = "♪ " + prettyName(SPECIAL_TRACK.name) + " — special";
+    const p = player.play(); if (p && p.catch){ await p.catch(()=>{}); }
+    updatePlayStateUI();
+  } catch(e){
+    songTitleEl.textContent = "Audio error (special).";
+  }
+}
+
+/* Player events */
+let seeking = false;
+player.addEventListener('loadedmetadata', () => { seekRange.max = isFinite(player.duration) ? player.duration : 0; durTimeEl.textContent = formatTime(player.duration); });
+player.addEventListener('timeupdate', () => { if (!seeking){ seekRange.value = player.currentTime || 0; curTimeEl.textContent = formatTime(player.currentTime); } });
+seekRange.addEventListener('input', () => { seeking = true; curTimeEl.textContent = formatTime(Number(seekRange.value)); });
+seekRange.addEventListener('change', () => { player.currentTime = Number(seekRange.value); seeking = false; });
+playPauseBtn.addEventListener('click', async () => { if (player.paused){ try{ await player.play(); }catch{} } else { player.pause(); } updatePlayStateUI(); });
+stopBtn.addEventListener('click', () => { player.pause(); player.currentTime = 0; updatePlayStateUI(); });
+prevBtn.addEventListener('click', async () => { const idx = prevFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
+nextBtn.addEventListener('click', async () => { const idx = nextFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
+
+/* ======== Copy ======== */
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  const poem = '"' + currentLines().join('\n') + '"';
+  const text = '*' + poem + '* ~ by Aramish';
+  try{
+    await navigator.clipboard.writeText(text);
+    const b = document.getElementById('copyBtn'); const old = b.textContent; b.textContent = '✅ Copied';
+    setTimeout(()=> b.textContent = old, 1200);
+  }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
+});
+
+/* ======== AUTOPLAY: try on open, else show consent ======== */
+async function tryStartRandomSong() {
+  if (!window.LIBRARY || !window.LIBRARY.length) return false;
+  try {
+    const idx = nextFromBag();
+    if (typeof idx === 'number') {
+      await playIndex(idx, { loop:false, advanceBagOnSuccess:true });
+      return true;
+    }
+    return false;
+  } catch(e){
+    return false;
+  }
+}
+function showAudioConsentOverlay() {
+  const overlay = document.getElementById('audio-consent');
+  const btn = document.getElementById('audio-consent-btn');
+  if (!overlay || !btn) return;
+  overlay.style.display = 'flex';
+  const enable = async () => {
+    const ok = await tryStartRandomSong();
+    if (ok) {
+      localStorage.setItem('poem.audioConsent', '1');
+      overlay.style.display = 'none';
+    } else {
+      alert('Still blocked by browser. Tap the ▶️ button once, then try again.');
+    }
+  };
+  btn.onclick = enable;
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) enable();
+  });
+}
+async function attemptAutoplayOnOpen(){
+  const ok = await tryStartRandomSong();
+  if (!ok) showAudioConsentOverlay();
+}
+
+/* ======== Buttons & Init ======== */
+document.getElementById('spinBtn').addEventListener('click', spinStair);
+
+function initVolume(){
+  const savedVol = Number(localStorage.getItem('poem_vol'));
+  if (!Number.isNaN(savedVol)) { player.volume = Math.max(0, Math.min(1, savedVol)); volRange.value = String(player.volume); }
+  else { player.volume = Number(volRange.value); }
+  volRange.addEventListener('input', () => {
+    player.volume = Number(volRange.value);
+    localStorage.setItem('poem_vol', String(player.volume));
+  });
+}
+
+/* Build & start (v44 look preserved) */
+buildRings();
+renderPoem(true);
+initVolume();
+
+/* Wait for the music library from index.js before building the bag */
+Promise.resolve(window.musicReady).then(() => {
+  LIBRARY = window.LIBRARY || [];
+  rebuildBag();
+  seekRange.value = 0;
+
+  // Try to autoplay once the library is ready
+  attemptAutoplayOnOpen();
+});
+
+/* Hidden special test: Shift+S */
+document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
+document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
+function generateSpecialPoem(){
+  const picks = [0, 1, 2, 1, 2]; // exact indices for the special (by content order)
+  picks.forEach((idx, i) => {
+    stacks[i].currentIndex = idx;
+    stacks[i].span.textContent = stacks[i].options[idx];
+  });
+  renderPoem(true);
+  playIndexForSpecial();
+}
+</script>
 </body>
 </html>
