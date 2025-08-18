@@ -10,7 +10,7 @@
 
   async function loadLibrary() {
     try {
-      // cache-bust so we always pull the latest manifest
+      // Cache-bust to ensure we always fetch the latest manifest
       const res = await fetch(TRACKS_URL + '?v=' + Date.now(), { cache: 'no-cache' });
       if (!res.ok) throw new Error('tracks.json HTTP ' + res.status);
 
@@ -22,7 +22,6 @@
 
       if (!lib.length) throw new Error('Empty manifest');
 
-      // ✅ FIX: assign the actual library
       window.LIBRARY = lib;
       console.log('[music] loaded', lib.length, 'tracks from tracks.json');
     } catch (err) {
