@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="index.js" defer></script>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Poem Rings — v44 (reorder + no-repeat shuffle)</title>
@@ -225,20 +226,10 @@ function isSpecialPoem(){
 }
 const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
 
-/* ======== MUSIC (simple no-repeat shuffle bag) ======== */
-const TRACKS = (window.TRACKS || [
-  "Lofi Jazz-1.mp3",
-  "Lofi Chill-2.mp3",
-  "Jazz Relax-1.mp3",
-  "Background Relax-3.mp3",
-  "Background Calm-4.mp3",
-  "Nature Birds-1.mp3",
-  "Ambient Tide-1.mp3",
-  "Ambient Drift-1.mp3"
-]);
+/* ======== MUSIC (library comes from index.js) ======== */
 const MUSIC_DIR = "music/";
 const BAD_TRACKS = new Set(); // fatal-only blacklist
-let LIBRARY = TRACKS.map(n => ({ name: String(n).trim(), url: MUSIC_DIR + encodeURIComponent(String(n).trim()) }));
+let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
 
 function fisherYatesShuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
@@ -510,11 +501,17 @@ function initVolume(){
 }
 
 /* Build & start */
+/* Build & start */
 buildRings();
 renderPoem(true);
 initVolume();
-rebuildBag();
-seekRange.value = 0;
+
+Promise.resolve(window.musicReady).then(() => {
+  LIBRARY = window.LIBRARY || [];
+  rebuildBag();
+  seekRange.value = 0;
+});
+
 
 /* Hidden special test: Shift+S */
 document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
