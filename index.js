@@ -18,7 +18,7 @@
         .map(toEntry)
         .filter(e => e.name && /\.mp3(\?.*)?$/i.test(e.name));
       if (!lib.length) throw new Error('Empty manifest');
-      window.LIBRARY = lib;
+      window.LIBRARY = libOrFallbackArray;
       console.log('[music] loaded', lib.length, 'tracks from tracks.json');
     } catch (err) {
       console.warn('[music] failed to load tracks.json; using minimal fallback', err);
@@ -28,6 +28,8 @@
       ];
     }
     window.musicReady = Promise.resolve(true);
+    window.dispatchEvent(new Event('musicReady'));
+
   }
 
   window.musicReady = loadLibrary();
