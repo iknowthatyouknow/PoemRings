@@ -1,7 +1,7 @@
 // index.js — loads the music library from tracks.json and exposes window.LIBRARY
 (function () {
-  const MUSIC_DIR  = 'music/';       // folder in repo root
-  const TRACKS_URL = 'tracks.json';  // manifest in repo root
+  const MUSIC_DIR  = 'music/';
+  const TRACKS_URL = 'tracks.json';
 
   function toEntry(name) {
     const clean = String(name || '').trim();
@@ -10,7 +10,7 @@
 
   async function loadLibrary() {
     try {
-      // cache-bust to ensure we always fetch the latest manifest
+      // cache-bust so we always pull the latest manifest
       const res = await fetch(TRACKS_URL + '?v=' + Date.now(), { cache: 'no-cache' });
       if (!res.ok) throw new Error('tracks.json HTTP ' + res.status);
 
@@ -22,7 +22,7 @@
 
       if (!lib.length) throw new Error('Empty manifest');
 
-      // ✅ FIX: assign the actual `lib`, not a non-existent variable
+      // ✅ FIX: assign the actual library
       window.LIBRARY = lib;
       console.log('[music] loaded', lib.length, 'tracks from tracks.json');
     } catch (err) {
@@ -33,7 +33,7 @@
       ];
     }
 
-    // Signal ready to index.html
+    // Signal readiness
     window.musicReady = Promise.resolve(true);
     window.dispatchEvent(new Event('musicReady'));
   }
