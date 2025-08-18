@@ -1,587 +1,494 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <script src="index.js" defer></script>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>If You Only knew</title>
-<style>
-  :root{
-    --spin-duration: 1200ms;
-    --stair-fraction: 0.25;
-    --line-stagger: 300ms;
-    --line-fade-dur: 1200ms;
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Poem Rings</title>
 
-    --ring-width: 760px;
-    --ring-height: 76px;
-    --bg-1: #0e1117;
-    --bg-2: #0b0e14;
-    --panel: #121826;
-    --panel-2: #141b2a;
-    --stroke: #263047;
-    --glow: rgba(0,0,0,.3);
-    --text: #e8ecf4;
-    --muted: #aeb7c8;
-    --special: #ffd166;
-    --btn: #1b2333;
-    --btn-hover: #202a3f;
-    --drag-handle: #8aa0c9;
-    --drop-hint: #3357ff55;
-  }
+  <!-- Load the music library loader FIRST (cache-busted) -->
+  <script src="index.js?v=6" defer></script>
 
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body{
-    margin:0;
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans";
-    -webkit-font-smoothing: antialiased;
-    background:
-      radial-gradient(1200px 600px at 50% -10%, #161a23 0%, #0e121a 50%, #090b10 100%),
-      linear-gradient(180deg, var(--bg-1), var(--bg-2));
-    color: var(--text);
-    display: grid;
-    place-items: center;
-    min-height: 100vh;
-    padding: 18px;
-  }
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --fg: #e9edf3;
+      --muted: #9aa8b4;
+      --accent: #7bdff6;
+      --accent2: #ffa69e;
+      --panel: #12161b;
+      --card: #151a21;
+      --ring: #232a33;
+      --border: #2b3440;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 24px auto 80px;
+      padding: 0 16px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+      letter-spacing: .4px;
+      font-weight: 700;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button, .button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #1a2129, #151a21);
+      color: var(--fg);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .08s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      border-color: #334253;
+      box-shadow: 0 8px 16px rgba(0,0,0,.25);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .panel h2 {
+      font-size: 14px;
+      color: var(--muted);
+      letter-spacing: .5px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+    }
+    /* Placeholder “rings” area (keep your visuals here if you have them) */
+    .rings {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }
+    .ring {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      padding: 10px;
+    }
 
-  .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
-  .stage{ display: grid; gap: 14px; perspective: 1000px; }
+    /* Final poem box */
+    .poemBox {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      min-height: 160px;
+      white-space: pre-wrap;
+      font-size: 18px; /* adjust if you want bigger/smaller */
+      line-height: 1.6;
+    }
+    .poemBox em { font-style: italic; }
 
-  .ring{ position: relative; width: 100%; height: var(--ring-height);
-         display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
-  .drag-handle{
-    user-select:none; -webkit-user-select:none;
-    display:flex; align-items:center; justify-content:center;
-    cursor: grab; font-size: 20px; color: var(--drag-handle);
-    background: linear-gradient(180deg, #0e1423, #0b1120);
-    border-radius: 12px; margin-right: 10px; border:1px solid #202a3f;
-  }
-  .drag-handle:active{ cursor: grabbing; }
+    /* Music player */
+    .music {
+      display: grid;
+      gap: 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .ticker {
+      font-size: 13px;
+      color: var(--muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .sliders {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    input[type="range"] {
+      accent-color: var(--accent);
+    }
 
-  .rim{ display:none; } /* decorative in older versions */
+    /* Audio consent overlay (NOTE: starts hidden; JS will set display:flex only if needed) */
+    #audio-consent {
+      display: none;                /* ← keep only this one, remove any duplicate display:flex */
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(2px);
+      z-index: 9999;
+      color: #fff;
+      align-items: center;          /* these are fine even while hidden */
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    #audio-consent .card {
+      background: #11161c;
+      border: 1px solid #26313d;
+      border-radius: 14px;
+      padding: 18px 16px;
+      max-width: 520px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
 
-  .card{
-    position: relative; width: 100%; height: 100%;
-    display: grid; place-items: center; padding: 0 18px;
-    border-radius: 14px;
-    background: linear-gradient(180deg, var(--panel), var(--panel-2));
-    box-shadow: inset 0 0 0 1px #2a3348, 0 10px 24px rgba(0,0,0,.28);
-    color: var(--text);
-    text-align: center; line-height: 1.25; letter-spacing: .2px;
-    overflow: hidden; transform: translateZ(0.1px);
-    backface-visibility: hidden; transform-style: preserve-3d;
-  }
-  .ring.drag-over .card{ outline: 2px dashed var(--drag-handle);
-                          background: linear-gradient(180deg, #101a30, #0e1628); }
-  .ring.drop-before::before, .ring.drop-after::after{
-    content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
-  }
-  .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
-  .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
-
-  .card > span{ display:block; width: 100%; white-space: normal;
-                font-size: clamp(14px, 1.75vw, 18px); }
-
-  @keyframes spinSmooth { from { transform: rotateY(0deg) translateZ(0.1px); }
-                          to   { transform: rotateY(360deg) translateZ(0.1px); } }
-  .spinning { animation: spinSmooth var(--spin-duration) linear; }
-
-  .controls{ display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap: wrap; }
-  button{
-    background: var(--btn); color: var(--text); border: 1px solid #2b3449;
-    padding: 10px 16px; border-radius: 12px; cursor: pointer; font-weight: 700; letter-spacing: .2px;
-    transition: transform .06s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease;
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  button:hover{ background:var(--btn-hover); border-color:#35415a; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
-  button:active{ transform: translateY(1px); }
-
-  .tips{ color: var(--muted); font-size: 13px; text-align:center; margin-top: -6px; }
-
-  .poem{
-    background: linear-gradient(180deg, #101522, #0f1522);
-    border: 1px solid #21283a; border-radius: 14px; padding: 14px 16px;
-    box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
-  }
-  .poem-header{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px; }
-  .poem h2{ margin: 0; font-size: 1rem; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
-  .special-badge{
-    display:inline-flex; align-items:center; gap:6px;
-    color: var(--special); background: rgba(255, 209, 102, 0.12);
-    border: 1px solid rgba(255,209,102,0.45); border-radius: 999px;
-    padding: 5px 10px; font-size: .88rem; font-weight: 700;
-    filter: drop-shadow(0 0 6px rgba(255,209,102,.35));
-  }
-  .poem .quote{ text-align:center; font-size: clamp(20px, 2.4vw, 32px); line-height: 1.35; }
-  .poem .byline{ margin-top: 6px; text-align:center; color: var(--muted); font-size: .95rem; font-style: italic; }
-
-  .line { opacity: 0; transform: translateY(6px);
-          animation: lineFade var(--line-fade-dur) ease forwards; }
-  @keyframes lineFade { from { opacity: 0; transform: translateY(6px); }
-                        to   { opacity: 1; transform: translateY(0); } }
-
-  .music {
-    display: grid; gap: 12px;
-    background: linear-gradient(180deg, #0f1522, #0d1421);
-    border: 1px solid #21283a; border-radius: 14px; padding: 12px 14px;
-    box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
-  }
-  .music-row { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-  .ticker {
-    position: relative; overflow: hidden; border:1px solid #242c3e; border-radius:10px;
-    background: #0b1120; padding: 8px 12px; min-width: 240px; flex: 1;
-  }
-  .ticker__inner { display:inline-block; white-space: nowrap; padding-left:100%;
-                   animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
-  @keyframes slide { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
-
-  .player-row{
-    display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
-    background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 12px;
-  }
-  .seek{ display:flex; align-items:center; gap:10px; flex:1; }
-  .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
-  .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
-
-  #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
-</style>
+    /* Small warning if we fall back to a tiny library */
+    #libWarn {
+      display: none;
+      color: #ffb703;
+      text-align: center;
+      margin-top: 6px;
+      font-size: 13px;
+    }
+  </style>
 </head>
 <body>
-  <!-- One-time audio consent overlay (appears only if autoplay is blocked) -->
-<div id="audio-consent" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter: blur(2px); z-index:9999; color:#fff; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px;">
-  <div style="max-width:520px; line-height:1.4;">
-    <h2 style="margin:0 0 8px;">Enable sound?</h2>
-    <p style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
-    <button id="audio-consent-btn" style="padding:10px 16px; border:0; border-radius:8px; font-weight:600; cursor:pointer;">Enable Sound</button>
-  </div>
-</div>
-
-<!-- Optional tiny warning if library fallback is used -->
-<div id="libWarn" style="display:none;color:#ffb703;text-align:center;margin-top:6px;">
-  ⚠️ Couldn’t load the full music library; using a tiny fallback list.
-</div>
-
-<!-- Poem history panel -->
-<details id="poemHistoryPanel" style="margin:16px auto; max-width:900px;">
-  <summary style="cursor:pointer; font-weight:600;">Poem history (timestamped)</summary>
-  <div style="display:flex; gap:12px; align-items:flex-start; margin-top:8px; flex-wrap:wrap;">
-    <select id="poemHistorySelect" size="6" style="min-width:280px; flex:1 1 320px;"></select>
-    <div style="display:flex; gap:8px; align-items:center;">
-      <button id="poemHistoryRestore" title="Show the selected poem in the output">Show</button>
-      <button id="poemHistoryClear" title="Clear all saved poems">Clear</button>
-      <button id="poemHistoryExport" title="Download CSV of saved poems">Export CSV</button>
-    </div>
-  </div>
-</details>
-
-  <!-- Hidden special-test button (also Shift+S) -->
-  <button id="testSpecialBtn" aria-label="Generate special poem">hidden</button>
-
   <div class="wrap">
-    <div class="stage" id="stage"></div>
-    <div class="tips">Drag the ⋮⋮ handle to reorder rings (top = first line)</div>
-
-    <div class="controls">
-      <button id="spinBtn">✨ Create Your Next Poem</button>
-      <button id="copyBtn">📋 Copy poem</button>
-    </div>
-
-    <div class="poem" id="poemBox" aria-live="polite">
-      <div class="poem-header">
-        <h2>Current Poem</h2>
-        <!-- Special badge is injected dynamically only when matched -->
+    <header>
+      <h1>Poem Rings</h1>
+      <div class="controls">
+        <button id="spinBtn">✨ Create Your Next Poem</button>
       </div>
-      <div id="poemFormatted" class="quote"></div>
-      <div class="byline">~ by Aramish</div>
-    </div>
+    </header>
 
-    <section class="music" aria-label="Music player">
-      <div class="music-row">
-        <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
-        <div class="controls">
-          <button id="prevBtn" title="Previous">⏮️</button>
-          <button id="playPauseBtn" title="Play/Pause">⏯️</button>
-          <button id="stopBtn" title="Stop">⏹️</button>
-          <button id="nextBtn" title="Next">⏭️</button>
-          <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#aeb7c8;">
-            Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
-          </label>
+    <div class="grid">
+      <!-- LEFT: rings + poem -->
+      <div class="panel">
+        <h2>Rings</h2>
+        <div class="rings" id="rings">
+          <div class="ring">Ring 1</div>
+          <div class="ring">Ring 2</div>
+          <div class="ring">Ring 3</div>
+          <div class="ring">Ring 4</div>
+          <div class="ring">Ring 5</div>
+        </div>
+
+        <h2 style="margin-top:16px;">Current Poem</h2>
+        <div class="poemBox" id="finalPoem">
+          <em>“Your poem will appear here…”</em> — by Aramish
+        </div>
+
+        <div id="libWarn">⚠️ Couldn’t load the full music library; using a tiny fallback list.</div>
+      </div>
+
+      <!-- RIGHT: music -->
+      <div class="music">
+        <h2>Music</h2>
+        <div class="ticker" id="nowPlaying">No track yet.</div>
+        <audio id="player" preload="none" controls></audio>
+        <div class="sliders">
+          <label>Volume <input id="volumeRange" type="range" min="0" max="1" step="0.01" value="0.7"></label>
+          <label>Seek <input id="seekRange" type="range" min="0" max="100" value="0"></label>
         </div>
       </div>
-
-      <div class="player-row">
-        <div class="seek">
-          <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
-        </div>
-        <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
-      </div>
-
-      <audio id="player" preload="auto"></audio>
-    </section>
+    </div>
   </div>
 
-<script>
-/* ======== POEMS: 5 rings × 4 lines ======== */
-const RINGS_DATA = [
-  ["Strength in Silence,","Grace Without Seeking, Calm in a Storm,","The World Bends Gentler Near her Soul","She is Proof That Kindness is a Force"],
-  ["Hope Carried in Quiet Hands,","Stillness that softens the Sharpest Edge,","She Listens Where Most Would Speak","And Builds with the Weight of Care"],
-  ["She Moves Like Morning Light,","Patience Carved into the Day,","Every Step Writes Peace in Stone","Her Silence Steadies The Storm"],
-  ["Gentle As the Breath Before Dawn,","Her Voice Mends What fear has Broken,","Fire Wrapped in Grace,","Kindness Carved into Motion"],
-  ["Dream in the Dawn,","Truth Without Armor, Steady in Light","The Horizon Waits for her Journey","She is Proof That Fate Wears Many Faces"]
-];
-// Reorderable stacks
-let stacks = [];  // [{id, options:[...], currentIndex, card, span, el}]
+  <!-- One-time audio consent overlay (only shown if autoplay is blocked) -->
+  <div id="audio-consent">
+    <div class="card">
+      <h2 style="margin:0 0 6px;">Enable sound?</h2>
+      <p style="margin:0 0 12px;">Tap once to allow background music. We’ll remember this for next time.</p>
+      <button id="audio-consent-btn">Enable Sound</button>
+    </div>
+  </div>
 
-/* ---- SPECIAL POEM (strict) ---- */
-function normalizeLineStrict(s){
-  return String(s || "")
-    .replace(/[“”"']/g, "")
-    .replace(/\s*[,;:!?]+$/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-function isSpecialPoem(){
-  const now = currentLines().map(normalizeLineStrict);
-  return now.length === 5 &&
-         now[0] === "strength in silence" &&
-         now[1] === "stillness that softens the sharpest edge" &&
-         now[2] === "every step writes peace in stone" &&
-         now[3] === "her voice mends what fear has broken" &&
-         now[4] === "the horizon waits for her journey";
-}
-const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
+  <script>
+    /* ============ Simple poem generator placeholders ============ */
+    const RINGS = [
+      [
+        "Strength in Silence",
+        "Grace Without Seeking, Calm in a Storm",
+        "The World Bends Gentler Near her Soul",
+        "She is Proof That Kindness is a Force"
+      ],
+      [
+        "Hope Carried in Quiet Hands",
+        "Stillness that softens the Sharpest Edge",
+        "She Listens Where Most Would Speak",
+        "And Builds with the Weight of Care"
+      ],
+      [
+        "She Moves Like Morning Light",
+        "Patience Carved into the Day",
+        "Every Step Writes Peace in Stone",
+        "Her Silence Steadies The Storm"
+      ],
+      [
+        "Gentle As the Breath Before Dawn",
+        "Her Voice Mends What Fear Has Broken",
+        "Fire Wrapped in Grace",
+        "Kindness Carved into Motion"
+      ],
+      [
+        "Dream in the Dawn",
+        "Truth Without Armor, Steady in Light",
+        "The Horizon Waits for Her Journey",
+        "She is Proof That Fate Wears Many Faces"
+      ]
+    ];
 
-/* ======== MUSIC (library comes from index.js) ======== */
-const MUSIC_DIR = "music/";
-const BAD_TRACKS = new Set(); // fatal-only blacklist
-let LIBRARY = window.LIBRARY || [];
-let bag = [], bagPos = -1, currentIndex = -1;
+    /* ====== MUSIC (library populated by index.js) ====== */
+    const BAD_TRACKS = new Set();           // blacklist if a file fatally fails
+    let LIBRARY = window.LIBRARY || [];
+    let bag = [], bagPos = -1, currentIndex = -1;
 
-function fisherYatesShuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); fisherYatesShuffle(bag); bagPos=-1; }
-function nextFromBag(){ if (!bag.length) rebuildBag(); bagPos++; if (bagPos>=bag.length){ rebuildBag(); bagPos=0; } return bag[bagPos]; }
-function prevFromBag(){ if (!bag.length) rebuildBag(); bagPos--; if (bagPos<0){ rebuildBag(); bagPos=bag.length-1; } return bag[bagPos]; }
+    const player = document.getElementById('player');
+    const volumeRange = document.getElementById('volumeRange');
+    const seekRange = document.getElementById('seekRange');
+    const ticker = document.getElementById('nowPlaying');
 
-/* ======== DOM ======== */
-const stage = document.getElementById('stage');
-const songTitleEl = document.getElementById('songTitle');
-const player = document.getElementById('player');
-const volRange = document.getElementById('volRange');
-const playPauseBtn = document.getElementById('playPauseBtn');
-const stopBtn = document.getElementById('stopBtn');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
-const seekRange = document.getElementById('seekRange');
-const curTimeEl = document.getElementById('curTime');
-const durTimeEl = document.getElementById('durTime');
-
-/* ======== Build Reorderable Rings ======== */
-function buildRings(){
-  stage.innerHTML = "";
-  stacks = [];
-  for (let i = 0; i < RINGS_DATA.length; i++){
-    const el = document.createElement('div');
-    el.className = 'ring';
-    el.draggable = true;
-    el.dataset.idx = String(i); // base id
-
-    const drag = document.createElement('div');
-    drag.className = 'drag-handle';
-    drag.title = "Drag to reorder";
-    drag.textContent = "⋮⋮";
-
-    const card = document.createElement('div'); card.className = 'card';
-    const span = document.createElement('span'); span.textContent = RINGS_DATA[i][0];
-    card.appendChild(span);
-
-    el.appendChild(drag);
-    el.appendChild(card);
-    stage.appendChild(el);
-
-    stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
-  }
-  wireDragAndDrop();
-}
-
-function wireDragAndDrop(){
-  let dragSrc = null;
-  stage.querySelectorAll('.ring').forEach(ring => {
-    ring.addEventListener('dragstart', (e) => {
-      dragSrc = ring;
-      e.dataTransfer.effectAllowed = 'move';
-      ring.classList.add('drag-over');
-    });
-    ring.addEventListener('dragend', () => {
-      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-      dragSrc = null;
-    });
-    ring.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
-      ring.classList.add('drag-over');
-      ring.classList.toggle('drop-before', e.clientY < midY);
-      ring.classList.toggle('drop-after',  e.clientY >= midY);
-      e.dataTransfer.dropEffect = 'move';
-    });
-    ring.addEventListener('dragleave', () => {
-      ring.classList.remove('drop-before','drop-after');
-    });
-    ring.addEventListener('drop', (e) => {
-      e.preventDefault();
-      if (!dragSrc || dragSrc === ring) return;
-
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
-      const dropBefore = e.clientY < midY;
-
-      // Reorder DOM
-      if (dropBefore) stage.insertBefore(dragSrc, ring);
-      else            stage.insertBefore(dragSrc, ring.nextSibling);
-
-      // Rebuild stacks array in new DOM order, preserving state
-      const newStacks = [];
-      stage.querySelectorAll('.ring').forEach(row => {
-        const found = stacks.find(s => s.el === row);
-        if (found) newStacks.push(found);
-      });
-      stacks = newStacks;
-
-      // Clean hints
-      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-    });
-  });
-}
-
-/* ======== Current lines & rendering ======== */
-function currentLines(){ return stacks.map(s => s.options[s.currentIndex]); }
-
-function setSpecialBadge(active){
-  const header = document.querySelector('.poem-header');
-  let badge = document.getElementById('specialBadge');
-  if (active){
-    if (!badge){
-      badge = document.createElement('span');
-      badge.id = 'specialBadge';
-      badge.className = 'special-badge';
-      badge.innerHTML = '<span class="star">✨</span> Special Poem';
-      header.appendChild(badge);
-    }
-  } else if (badge) badge.remove();
-}
-function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function renderPoem(animated=false){
-  const lines = currentLines();
-  const quote = document.getElementById('poemFormatted');
-  if (!animated){
-    quote.innerHTML = '<em>"' + lines.map(escapeHTML).join('<br>') + '"</em>';
-  } else {
-    const stagger = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line-stagger')) || 300;
-    let html = '<em>"';
-    for (let i=0;i<lines.length;i++){
-      html += `<span class="line" style="animation-delay:${i*stagger}ms">${escapeHTML(lines[i])}</span>`;
-      if (i < lines.length-1) html += '<br>';
-    }
-    html += '"</em>';
-    quote.innerHTML = html;
-  }
-  setSpecialBadge(isSpecialPoem());
-}
-
-/* ======== Spin logic (stair) ======== */
-function parseTimeToMs(val){ if (!val) return 0; if (val.endsWith('ms')) return parseFloat(val); if (val.endsWith('s')) return parseFloat(val)*1000; return parseFloat(val)||0; }
-function startSpin(card){ card.classList.remove('spinning'); void card.offsetWidth; card.classList.add('spinning'); }
-function stopSpin(card){ card.classList.remove('spinning'); }
-
-function unlockAudioOnce(){
-  if (player._unlocked) return;
-  try {
-    player.volume = Number(volRange.value || 0.6);
-    const p = player.play();
-    if (p && p.then){
-      p.then(() => { player.pause(); player.currentTime = 0; player._unlocked = true; })
-       .catch(() => { player._unlocked = true; });
-    } else { player._unlocked = true; }
-  } catch { player._unlocked = true; }
-}
-
-function spinStair(){
-  unlockAudioOnce();
-
-  const spinDur = parseTimeToMs(getComputedStyle(document.documentElement).getPropertyValue('--spin-duration').trim());
-  const offset = spinDur * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stair-fraction') || 0.25);
-  const nextIndices = stacks.map(s => Math.floor(Math.random() * s.options.length));
-  const lastMidSwapTime = (stacks.length - 1) * offset + spinDur * 0.5;
-
-  stacks.forEach((s, idx) => {
-    const startDelay = idx * offset;
-    setTimeout(() => startSpin(s.card), startDelay);
-    setTimeout(() => { s.currentIndex = nextIndices[idx]; s.span.textContent = s.options[nextIndices[idx]]; }, startDelay + spinDur * 0.5);
-    setTimeout(() => stopSpin(s.card), startDelay + spinDur + 20);
-  });
-
-  setTimeout(async () => {
-    renderPoem(true);
-    if (isSpecialPoem()){
-      await playIndexForSpecial();
-    } else {
-      const idx = nextFromBag();
-      if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true});
-    }
-  }, lastMidSwapTime + 60);
-}
-
-/* ======== Music player (simple) ======== */
-function prettyName(filename){ return String(filename).replace(/\.[^/.]+$/,"").replace(/_/g," ").replace(/-/g," ").trim(); }
-function formatTime(t){ if (!isFinite(t)) return "0:00"; const m = Math.floor(t/60), s = Math.floor(t%60); return m + ":" + String(s).padStart(2,"0"); }
-function resetSeekUI(){ seekRange.value = 0; seekRange.max = 0; curTimeEl.textContent = "0:00"; durTimeEl.textContent = "0:00"; }
-function updatePlayStateUI(){ playPauseBtn.textContent = player.paused ? "▶️" : "⏸️"; }
-function isFatalAudioError(){ const c = player.error && player.error.code; return c === 3 || c === 4; }
-
-async function playIndex(i, {loop=false, advanceBagOnSuccess=false} = {}){
-  if (i < 0 || i >= LIBRARY.length) return;
-  const tr = LIBRARY[i];
-  try{
-    player.onended = null;
-    player.loop = loop;
-    resetSeekUI();
-    player.src = tr.url;
-    player.load();
-    songTitleEl.textContent = "♪ " + prettyName(tr.name);
-    const p = player.play();
-    if (p && p.catch){
-      await p.catch((err) => {
-        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')){
-          updatePlayStateUI();
-          throw { _nonfatal: true, err };
-        }
-        throw err;
-      });
-    }
-    currentIndex = i;
-    updatePlayStateUI();
-    if (advanceBagOnSuccess){
-      const pos = bag.indexOf(i);
-      if (pos !== -1) bagPos = pos;
-    }
-  } catch(e){
-    if (e && e._nonfatal) return;
-    if (isFatalAudioError()){
-      BAD_TRACKS.add(tr.name);
-      rebuildBag();
-      const nxt = nextFromBag();
-      if (typeof nxt === 'number'){ await playIndex(nxt, {loop, advanceBagOnSuccess:true}); return; }
-    }
-    songTitleEl.textContent = "Audio error.";
-  }
-}
-async function playIndexForSpecial(){
-  try{
-    resetSeekUI();
-    player.onended = null;
-    player.loop = true;
-    player.src = SPECIAL_TRACK.url;
-    player.load();
-    songTitleEl.textContent = "♪ " + prettyName(SPECIAL_TRACK.name) + " — special";
-    const p = player.play(); if (p && p.catch){ await p.catch(()=>{}); }
-    updatePlayStateUI();
-  } catch(e){
-    songTitleEl.textContent = "Audio error (special).";
-  }
-}
-
-/* Player events */
-let seeking = false;
-player.addEventListener('loadedmetadata', () => { seekRange.max = isFinite(player.duration) ? player.duration : 0; durTimeEl.textContent = formatTime(player.duration); });
-player.addEventListener('timeupdate', () => { if (!seeking){ seekRange.value = player.currentTime || 0; curTimeEl.textContent = formatTime(player.currentTime); } });
-seekRange.addEventListener('input', () => { seeking = true; curTimeEl.textContent = formatTime(Number(seekRange.value)); });
-seekRange.addEventListener('change', () => { player.currentTime = Number(seekRange.value); seeking = false; });
-playPauseBtn.addEventListener('click', async () => { if (player.paused){ try{ await player.play(); }catch{} } else { player.pause(); } updatePlayStateUI(); });
-stopBtn.addEventListener('click', () => { player.pause(); player.currentTime = 0; updatePlayStateUI(); });
-prevBtn.addEventListener('click', async () => { const idx = prevFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
-nextBtn.addEventListener('click', async () => { const idx = nextFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
-
-/* ======== Copy ======== */
-document.getElementById('copyBtn').addEventListener('click', async () => {
-  const poem = '"' + currentLines().join('\n') + '"';
-  const text = '*' + poem + '* ~ by Aramish';
-  try{
-    await navigator.clipboard.writeText(text);
-    const b = document.getElementById('copyBtn'); const old = b.textContent; b.textContent = '✅ Copied';
-    setTimeout(()=> b.textContent = old, 1200);
-  }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
-});
-
-/* ======== Buttons & Init ======== */
-document.getElementById('spinBtn').addEventListener('click', spinStair);
-
-function initVolume(){
-  const savedVol = Number(localStorage.getItem('poem_vol'));
-  if (!Number.isNaN(savedVol)) { player.volume = Math.max(0, Math.min(1, savedVol)); volRange.value = String(player.volume); }
-  else { player.volume = Number(volRange.value); }
-  volRange.addEventListener('input', () => {
-    player.volume = Number(volRange.value);
-    localStorage.setItem('poem_vol', String(player.volume));
-  });
-}
-/*  ====== Build & start ========*/
-buildRings();
-renderPoem(true);
-initVolume();
-
-/** Wait until the library is really present (index.js → tracks.json) */
-function waitForLibrary() {
-  // already loaded?
-  if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
-
-  return new Promise((resolve) => {
-    let tries = 0;
-    const iv = setInterval(() => {
-      tries++;
-      if (window.LIBRARY && window.LIBRARY.length) {
-        clearInterval(iv);
-        resolve();
-      } else if (tries > 200) { // ~10s max
-        clearInterval(iv);
-        resolve(); // give up but continue; fallback will show
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
       }
-    }, 50);
+      return arr;
+    }
 
-    // Also resolve when index.js dispatches the ready event (see step 3B)
-    window.addEventListener('musicReady', () => {
-      clearInterval(iv);
-      resolve();
-    }, { once: true });
-  });
-}
+    function rebuildBag() {
+      const idx = [];
+      for (let i = 0; i < LIBRARY.length; i++) {
+        if (!BAD_TRACKS.has(LIBRARY[i].name)) idx.push(i);
+      }
+      shuffle(idx);
+      bag = idx;
+      bagPos = -1;
+      // console.log('[bag] rebuilt with', bag.length);
+    }
 
-waitForLibrary().then(() => {
-  LIBRARY = window.LIBRARY || [];
-  if (!LIBRARY.length || LIBRARY.length <= 2) {
-    const warn = document.getElementById('libWarn');
-    if (warn) warn.style.display = 'block';
-    console.warn('[music] library looks small; probably using fallback');
-  } else {
-    console.log('[music] library ready with', LIBRARY.length, 'tracks');
-  }
-  rebuildBag();
-  seekRange.value = 0;
-});
+    function initVolume() {
+      if (!player) return;
+      player.volume = Number(volumeRange?.value ?? 0.7) || 0.7;
 
-/* Hidden special test: Shift+S */
-document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
-document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
-function generateSpecialPoem(){
-  const picks = [0, 1, 2, 1, 2]; // exact indices for the special (by content order)
-  picks.forEach((idx, i) => {
-    stacks[i].currentIndex = idx;
-    stacks[i].span.textContent = stacks[i].options[idx];
-  });
-  renderPoem(true);
-  playIndexForSpecial();
-}
-</script>
+      if (volumeRange) {
+        volumeRange.addEventListener('input', () => {
+          player.volume = Number(volumeRange.value);
+        });
+      }
+      if (seekRange) {
+        player.addEventListener('timeupdate', () => {
+          const p = player.duration ? (player.currentTime / player.duration) * 100 : 0;
+          seekRange.value = Math.floor(p);
+        });
+        seekRange.addEventListener('input', () => {
+          if (player.duration) {
+            player.currentTime = (Number(seekRange.value) / 100) * player.duration;
+          }
+        });
+      }
+    }
+
+    function updateTicker(i) {
+      const tr = LIBRARY[i];
+      ticker.textContent = tr ? `Now Playing: ${tr.name}` : 'No track';
+    }
+
+    function playIndex(i, opts = {}) {
+      return new Promise((resolve, reject) => {
+        const tr = LIBRARY[i];
+        if (!tr) return reject(new Error('No track at index ' + i));
+
+        player.src = tr.url;
+        updateTicker(i);
+
+        const onPlay = () => {
+          player.removeEventListener('playing', onPlay);
+          resolve(true);
+        };
+        const onErr = (e) => {
+          player.removeEventListener('error', onErr);
+          console.warn('[audio] error on', tr.url, e);
+          BAD_TRACKS.add(tr.name);
+          reject(new Error('Play failed'));
+        };
+
+        player.addEventListener('playing', onPlay, { once: true });
+        player.addEventListener('error', onErr, { once: true });
+
+        const p = player.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(err => {
+            // Autoplay likely blocked
+            reject(err);
+          });
+        }
+      });
+    }
+
+    /* ==================== AUTOPLAY consent & random start ==================== */
+    async function tryStartRandomSong() {
+      if (!window.LIBRARY || !window.LIBRARY.length) return false;
+      if (!bag || !bag.length) rebuildBag();
+      const next = (bagPos + 1) % bag.length;
+      bagPos = next;
+      currentIndex = bag[next];
+      try {
+        await playIndex(currentIndex, { loop:false, advanceBagOnSuccess:true });
+        console.log('[audio] autoplay started:', LIBRARY[currentIndex]?.name);
+        return true;
+      } catch (e) {
+        console.warn('[audio] autoplay blocked or failed:', e);
+        return false;
+      }
+    }
+
+    function showAudioConsentOverlay() {
+      const overlay = document.getElementById('audio-consent');
+      const btn = document.getElementById('audio-consent-btn');
+      if (!overlay || !btn) return;
+
+      overlay.style.display = 'flex'; // show only when needed
+
+      const enable = async () => {
+        const ok = await tryStartRandomSong();
+        if (ok) {
+          localStorage.setItem('poem.audioConsent', '1');
+          overlay.style.display = 'none';
+        } else {
+          alert('Still blocked by the browser. Tap the ▶️ button once, then try again.');
+        }
+      };
+      btn.onclick = enable;
+
+      // Optional: clicking outside the card also enables
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) enable();
+      });
+    }
+
+    async function attemptAutoplayOnOpen() {
+      // If user has previously consented, autoplay will likely succeed immediately
+      const ok = await tryStartRandomSong();
+      if (!ok) showAudioConsentOverlay();
+    }
+
+    /* ==================== Poem logic (simple) ==================== */
+    function buildRings() {
+      // Keep your actual ring visuals if you have them; this is just a label filler
+      const el = document.getElementById('rings');
+      if (!el) return;
+      [...el.children].forEach((child, i) => {
+        child.textContent = `Ring ${i+1}`;
+      });
+    }
+
+    function generatePoem() {
+      // pick one line from each ring
+      const lines = RINGS.map(group => group[Math.floor(Math.random() * group.length)]);
+      // Final formatting: quoted, italic, with “— by Aramish”
+      return `“${lines[0]}”\n“${lines[1]}”\n“${lines[2]}”\n“${lines[3]}”\n“${lines[4]}” — by Aramish`;
+    }
+
+    function renderPoem(initial=false) {
+      const out = document.getElementById('finalPoem');
+      if (!out) return;
+      const text = generatePoem();
+      if (initial) {
+        out.textContent = text;
+        return;
+      }
+      // simple line-by-line “magical” reveal
+      out.textContent = '';
+      const parts = text.split('\n');
+      let i = 0;
+      const tick = () => {
+        if (i >= parts.length) return;
+        out.textContent += (i ? '\n' : '') + parts[i++];
+        setTimeout(tick, 260);
+      };
+      tick();
+    }
+
+    /*  ====== Build & start ========*/
+    buildRings();
+    renderPoem(true);
+    initVolume();
+
+    function waitForLibrary() {
+      if (window.LIBRARY && window.LIBRARY.length) return Promise.resolve();
+      return new Promise((resolve) => {
+        let tries = 0;
+        const iv = setInterval(() => {
+          tries++;
+          if (window.LIBRARY && window.LIBRARY.length) {
+            clearInterval(iv);
+            resolve();
+          } else if (tries > 200) { // ~10s safety
+            clearInterval(iv);
+            resolve(); // proceed (will fallback if still empty)
+          }
+        }, 50);
+        window.addEventListener('musicReady', () => {
+          clearInterval(iv);
+          resolve();
+        }, { once: true });
+      });
+    }
+
+    waitForLibrary().then(() => {
+      LIBRARY = window.LIBRARY || [];
+      if (!LIBRARY.length || LIBRARY.length <= 2) {
+        const warn = document.getElementById('libWarn');
+        if (warn) warn.style.display = 'block';
+        console.warn('[music] library looks small; probably using fallback');
+      } else {
+        console.log('[music] library ready with', LIBRARY.length, 'tracks');
+      }
+      rebuildBag();
+      seekRange.value = 0;
+
+      // Try autoplay on open (shows consent sheet if blocked)
+      attemptAutoplayOnOpen();
+    });
+
+    /* Spin button → new poem */
+    document.getElementById('spinBtn')?.addEventListener('click', () => {
+      renderPoem(false);
+    });
+  </script>
 </body>
 </html>
