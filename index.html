@@ -483,45 +483,48 @@ function buildRings(){
 function wireDesktopDnD(){
   let dragSrcRing = null;
 
-  // Attach to the HANDLE, not the ring
-  stage.querySelectorAll('.ring .drag-handle').forEach(handle => {
-    const ring = handle.closest('.ring');
-
-    handle.addEventListener('dragstart', (e) => {
+  // Start/End drag on the RING (so the ring is the drag source)
+  stage.querySelectorAll('.ring').forEach(ring => {
+    ring.addEventListener('dragstart', (e) => {
       dragSrcRing = ring;
-      // Safari requires setData or DnD won't start
       try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {}
       e.dataTransfer.effectAllowed = 'move';
       ring.classList.add('drag-over');
     });
 
-    handle.addEventListener('dragend', () => {
+    ring.addEventListener('dragend', () => {
       stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
       dragSrcRing = null;
     });
   });
 
-  // The drop targets are the rings themselves
-  stage.querySelectorAll('.ring').forEach(ring => {
-    ring.addEventListener('dragover', (e) => {
-      if (!dragSrcRing) return;
-      e.preventDefault();                 // required to allow drop
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
-      ring.classList.add('drag-over');
-      ring.classList.toggle('drop-before', e.clientY < midY);
-      ring.classList.toggle('drop-after',  e.clientY >= midY);
-      e.dataTransfer.dropEffect = 'move';
-    });
+  // Use DELEGATION so child elements also count as valid drop targets
+  stage.addEventListener('dragover', (e) => {
+    if (!dragSrcRing) return;
+    const ring = e.target.closest('.ring');
+    if (!ring) return;
+    e.preventDefault(); // allow drop
+    const rect = ring.getBoundingClientRect();
+    const midY = rect.top + rect.height/2;
+    ring.classList.add('drag-over');
+    ring.classList.toggle('drop-before', e.clientY < midY);
+    ring.classList.toggle('drop-after',  e.clientY >= midY);
+    try { e.dataTransfer.dropEffect = 'move'; } catch(_) {}
+  });
 
-    ring.addEventListener('dragleave', () => {
-      ring.classList.remove('drop-before','drop-after');
-    });
+  stage.addEventListener('dragleave', (e) => {
+    const ring = e.target.closest('.ring');
+    if (ring) ring.classList.remove('drop-before','drop-after');
+  });
 
-    ring.addEventListener('drop', (e) => {
-      e.preventDefault();
-      if (!dragSrcRing || dragSrcRing === ring) return;
+  stage.addEventListener('drop', (e) => {
+    if (!dragSrcRing) return;
+    const ring = e.target.closest('.ring');
+    if (!ring) return;
+    e.preventDefault();
+    e.stopPropagation();
 
+    if (dragSrcRing !== ring){
       const rect = ring.getBoundingClientRect();
       const midY = rect.top + rect.height/2;
       const dropBefore = e.clientY < midY;
@@ -530,7 +533,7 @@ function wireDesktopDnD(){
       if (dropBefore) stage.insertBefore(dragSrcRing, ring);
       else            stage.insertBefore(dragSrcRing, ring.nextSibling);
 
-      // Rebuild stacks array according to new DOM order
+      // Rebuild stacks from new DOM order
       const newStacks = [];
       stage.querySelectorAll('.ring').forEach(row => {
         const found = stacks.find(s => s.el === row);
@@ -538,12 +541,16 @@ function wireDesktopDnD(){
       });
       stacks = newStacks;
 
-      // Clean up classes
-      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-      dragSrcRing = null;
-    });
+      // Immediately update poem after movement (ruleset)
+      renderPoem(true);
+    }
+
+    // Clean visuals
+    stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+    dragSrcRing = null;
   });
 }
+
 
 /* Touch/Pointer Drag & Drop for mobile */
 function wireTouchDnD(){
