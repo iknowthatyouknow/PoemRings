@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>For Only You</title>
+  <title>For You Only</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -47,7 +47,7 @@
       place-items: center;
       min-height: 100vh;
       padding: 18px;
-      overflow-x: hidden; /* NEW: prevent horizontal spill on mobile */
+      overflow-x: hidden; /* prevent horizontal spill on mobile */
     }
 
     .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
@@ -62,8 +62,25 @@
       background: linear-gradient(180deg, #0e1423, #0b1120);
       border-radius: 12px; margin-right: 10px; border:1px solid #202a3f;
       min-width: 44px;
+      touch-action: none; /* allow custom drag on touch */
     }
     .drag-handle:active{ cursor: grabbing; }
+
+    .ring.dragging .card{
+      box-shadow: inset 0 0 0 1px #2a3348, 0 16px 30px rgba(0,0,0,.45);
+      transform: translateZ(0.1px) scale(1.01);
+    }
+    .ring.placeholder .card{
+      opacity: .25;
+      outline: 2px dashed var(--drag-handle);
+    }
+    .ring.drag-over .card{ outline: 2px dashed var(--drag-handle);
+                            background: linear-gradient(180deg, #101a30, #0e1628); }
+    .ring.drop-before::before, .ring.drop-after::after{
+      content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
+    }
+    .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
+    .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
 
     .rim{ display:none; } /* decorative in older versions */
 
@@ -78,18 +95,10 @@
       overflow: hidden; transform: translateZ(0.1px);
       backface-visibility: hidden; transform-style: preserve-3d;
     }
-    .ring.drag-over .card{ outline: 2px dashed var(--drag-handle);
-                            background: linear-gradient(180deg, #101a30, #0e1628); }
-    .ring.drop-before::before, .ring.drop-after::after{
-      content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
-    }
-    .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
-    .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
 
     .card > span{
       display:block; width: 100%; white-space: normal;
-      /* Scale text with viewport but cap for legibility */
-      font-size: clamp(14px, 4.0vw, 18px); /* NEW: was 1.75vw; this is friendlier on phones */
+      font-size: clamp(14px, 4.0vw, 18px);
       word-break: normal;
     }
 
@@ -125,7 +134,7 @@
     }
     .poem .quote{
       text-align:center;
-      font-size: clamp(18px, 5.2vw, 32px); /* NEW: scales better on phones */
+      font-size: clamp(18px, 5.2vw, 32px);
       line-height: 1.35;
       word-break: normal;
     }
@@ -173,14 +182,10 @@
 
     #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
 
-    /* ---------- Responsive tweaks (no layout changes) ---------- */
+    /* ---------- Responsive (no structural changes) ---------- */
 
-    /* Tablet-ish */
     @media (max-width: 768px){
-      :root{
-        --ring-width: 96vw;        /* use almost full width */
-        --ring-height: 68px;       /* slightly shorter rings */
-      }
+      :root{ --ring-width: 96vw; --ring-height: 68px; }
       body{ padding: 14px; }
       .wrap{ gap: 12px; }
       .stage{ gap: 12px; }
@@ -191,12 +196,8 @@
       .player-row{ gap: 8px; }
     }
 
-    /* Phones */
     @media (max-width: 480px){
-      :root{
-        --ring-width: 96vw;        /* full width minus padding */
-        --ring-height: 56px;       /* comfortable tap/fit */
-      }
+      :root{ --ring-width: 96vw; --ring-height: 56px; }
       body{ padding: 10px; }
       .wrap{ gap: 10px; }
       .stage{ gap: 10px; }
@@ -208,13 +209,9 @@
       .controls button{ padding: 10px 12px; }
 
       .music{ gap: 10px; padding: 10px 12px; }
-      .music-row{
-        flex-direction: column; align-items: stretch; gap: 10px;
-      }
+      .music-row{ flex-direction: column; align-items: stretch; gap: 10px; }
       .ticker{ min-width: 0; width: 100%; }
-      .player-row{
-        flex-direction: column; align-items: stretch; gap: 8px;
-      }
+      .player-row{ flex-direction: column; align-items: stretch; gap: 8px; }
       .seek{ min-width: 0; }
       .time{ text-align: left; }
     }
@@ -314,7 +311,7 @@ const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
 
-/* Waiting helper (ensures tracks.json loaded) */
+/* ---------- Wait until tracks.json is ready ---------- */
 function waitForLibraryReady(){
   return new Promise((resolve) => {
     if (window.LIBRARY && window.LIBRARY.length) return resolve();
@@ -350,8 +347,8 @@ function buildRings(){
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = true;
-    el.dataset.idx = String(i); // base id
+    el.draggable = true;                      // desktop HTML5 DnD
+    el.dataset.idx = String(i);               // base id
 
     const drag = document.createElement('div');
     drag.className = 'drag-handle';
@@ -368,10 +365,12 @@ function buildRings(){
 
     stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
   }
-  wireDragAndDrop();
+  wireDesktopDnD();
+  wireTouchDnD(); // NEW: iOS/Android drag
 }
 
-function wireDragAndDrop(){
+/* ======== Desktop (HTML5) DnD ======== */
+function wireDesktopDnD(){
   let dragSrc = null;
   stage.querySelectorAll('.ring').forEach(ring => {
     ring.addEventListener('dragstart', (e) => {
@@ -403,22 +402,154 @@ function wireDragAndDrop(){
       const midY = rect.top + rect.height/2;
       const dropBefore = e.clientY < midY;
 
-      // Reorder DOM
       if (dropBefore) stage.insertBefore(dragSrc, ring);
       else            stage.insertBefore(dragSrc, ring.nextSibling);
 
-      // Rebuild stacks array in new DOM order, preserving state
-      const newStacks = [];
-      stage.querySelectorAll('.ring').forEach(row => {
-        const found = stacks.find(s => s.el === row);
-        if (found) newStacks.push(found);
-      });
-      stacks = newStacks;
-
-      // Clean hints
+      rebuildStacksFromDOM();
       stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
     });
   });
+}
+
+/* ======== Mobile Touch/Pointer DnD ======== */
+function wireTouchDnD(){
+  const rings = Array.from(stage.querySelectorAll('.ring'));
+  rings.forEach(ring => {
+    const handle = ring.querySelector('.drag-handle');
+    if (!handle) return;
+
+    let dragging = false;
+    let draggedEl = null;
+    let startY = 0;
+    let currentY = 0;
+    let placeholder = null;
+
+    const onPointerDown = (ev) => {
+      // Only react to primary pointer/touch
+      if (ev.pointerType && ev.pointerType !== 'touch' && ev.pointerType !== 'mouse') return;
+      if (ev.button !== undefined && ev.button !== 0) return;
+
+      ev.preventDefault();
+      startY = ev.clientY || (ev.touches && ev.touches[0].clientY) || 0;
+      currentY = startY;
+      draggedEl = ring;
+      dragging = true;
+
+      // Visuals
+      draggedEl.classList.add('dragging');
+
+      // Create a placeholder directly after dragged element
+      placeholder = document.createElement('div');
+      placeholder.className = 'ring placeholder';
+      placeholder.style.height = getComputedStyle(draggedEl).height;
+      // Clone just the card styling for consistent height
+      const phCard = document.createElement('div');
+      phCard.className = 'card';
+      placeholder.appendChild(phCard);
+
+      draggedEl.parentNode.insertBefore(placeholder, draggedEl.nextSibling);
+
+      // While dragging, we temporarily use absolute positioning
+      const rect = draggedEl.getBoundingClientRect();
+      const stageRect = stage.getBoundingClientRect();
+      draggedEl.style.position = 'absolute';
+      draggedEl.style.left = rect.left - stageRect.left + 'px';
+      draggedEl.style.width = rect.width + 'px';
+      draggedEl.style.zIndex = 1000;
+      moveDragged(ev);
+
+      // Add listeners
+      window.addEventListener('pointermove', onPointerMove, {passive:false});
+      window.addEventListener('pointerup', onPointerUp, {passive:false, once:true});
+
+      // Fallback for touch-only devices
+      window.addEventListener('touchmove', onTouchMove, {passive:false});
+      window.addEventListener('touchend', onTouchEnd, {passive:false, once:true});
+    };
+
+    const moveDragged = (ev) => {
+      const y = (ev.clientY || (ev.touches && ev.touches[0].clientY) || currentY);
+      currentY = y;
+      const stageRect = stage.getBoundingClientRect();
+      const targetTop = y - stageRect.top - (draggedEl.offsetHeight/2);
+      draggedEl.style.top = Math.max(0, targetTop) + 'px';
+
+      // Find ring under the touch point
+      const el = document.elementFromPoint(stageRect.left + draggedEl.offsetWidth/2 + 1, y);
+      const ringUnder = el ? el.closest('.ring') : null;
+
+      if (ringUnder && ringUnder !== draggedEl && ringUnder !== placeholder){
+        const rect = ringUnder.getBoundingClientRect();
+        const midY = rect.top + rect.height/2;
+        if (y < midY){
+          stage.insertBefore(placeholder, ringUnder);
+        } else {
+          stage.insertBefore(placeholder, ringUnder.nextSibling);
+        }
+      }
+    };
+
+    const onPointerMove = (ev) => {
+      if (!dragging) return;
+      ev.preventDefault();
+      moveDragged(ev);
+    };
+    const onTouchMove = (ev) => {
+      if (!dragging) return;
+      ev.preventDefault();
+      moveDragged(ev);
+    };
+
+    const finalizeDrop = () => {
+      // Place dragged element where the placeholder is
+      if (placeholder && placeholder.parentNode){
+        stage.insertBefore(draggedEl, placeholder);
+        placeholder.remove();
+        placeholder = null;
+      }
+      // Cleanup styles
+      draggedEl.style.position = '';
+      draggedEl.style.left = '';
+      draggedEl.style.top = '';
+      draggedEl.style.width = '';
+      draggedEl.style.zIndex = '';
+      draggedEl.classList.remove('dragging');
+
+      rebuildStacksFromDOM();
+      dragging = false;
+      draggedEl = null;
+    };
+
+    const onPointerUp = (ev) => {
+      ev.preventDefault();
+      finalizeDrop();
+      window.removeEventListener('pointermove', onPointerMove, {passive:false});
+      window.removeEventListener('touchmove', onTouchMove, {passive:false});
+    };
+    const onTouchEnd = (ev) => {
+      ev.preventDefault();
+      finalizeDrop();
+      window.removeEventListener('pointermove', onPointerMove, {passive:false});
+      window.removeEventListener('touchmove', onTouchMove, {passive:false});
+    };
+
+    // Pointer preferred, touch fallback
+    if (window.PointerEvent){
+      handle.addEventListener('pointerdown', onPointerDown, {passive:false});
+    } else {
+      handle.addEventListener('touchstart', (e)=>{ onPointerDown(e); }, {passive:false});
+    }
+  });
+}
+
+/* Rebuild stacks in current DOM order after any drag (desktop or touch) */
+function rebuildStacksFromDOM(){
+  const newStacks = [];
+  stage.querySelectorAll('.ring').forEach(row => {
+    const found = stacks.find(s => s.el === row);
+    if (found) newStacks.push(found);
+  });
+  stacks = newStacks;
 }
 
 /* ======== Current lines & rendering ======== */
