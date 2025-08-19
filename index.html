@@ -18,6 +18,9 @@
       --ring-width: 760px;
       --ring-height: 76px;
 
+      /* Crossfade duration */
+      --xfade-ms: 1800ms;
+
       --bg-1: #0e1117;
       --bg-2: #0b0e14;
       --panel: #121826;
@@ -31,6 +34,15 @@
       --btn-hover: #202a3f;
       --drag-handle: #8aa0c9;
       --drop-hint: #3357ff55;
+
+      /* Player buttons (new visual) */
+      --pbtn-bg1: #1a2233;
+      --pbtn-bg2: #131b2a;
+      --pbtn-border: #2a344a;
+      --pbtn-hover: #24304a;
+      --pbtn-active: #1b2740;
+      --pbtn-glow: 0 8px 22px rgba(0,0,0,.28);
+      --pbtn-ring: rgba(120,175,255,.25);
     }
 
     * { box-sizing: border-box; }
@@ -48,6 +60,9 @@
       min-height: 100vh;
       padding: 18px;
       overflow-x: hidden; /* prevent horizontal spill on mobile */
+      overscroll-behavior: contain;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
     .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
@@ -74,13 +89,6 @@
       opacity: .25;
       outline: 2px dashed var(--drag-handle);
     }
-    .ring.drag-over .card{ outline: 2px dashed var(--drag-handle);
-                            background: linear-gradient(180deg, #101a30, #0e1628); }
-    .ring.drop-before::before, .ring.drop-after::after{
-      content:""; position:absolute; left:0; right:0; height:8px; background: var(--drop-hint);
-    }
-    .ring.drop-before::before{ top:-6px; border-radius:6px 6px 0 0; }
-    .ring.drop-after::after{ bottom:-6px; border-radius:0 0 6px 6px; }
 
     .rim{ display:none; } /* decorative in older versions */
 
@@ -168,6 +176,35 @@
     .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
     .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
 
+    /* New, elegant player controls (visual-only) */
+    .player-controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .player-controls .pbtn{
+      position: relative;
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:8px; padding: 10px 14px; min-width: 44px;
+      border-radius: 12px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+      background: linear-gradient(180deg, var(--pbtn-bg1), var(--pbtn-bg2));
+      border: 1px solid var(--pbtn-border);
+      box-shadow: var(--pbtn-glow), inset 0 0 0 1px rgba(255,255,255,0.02);
+      color: var(--text);
+      transition: transform .06s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease, filter .2s ease;
+    }
+    .player-controls .pbtn:hover{
+      background: linear-gradient(180deg, var(--pbtn-hover), var(--pbtn-bg2));
+      border-color: #33415a;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,.25));
+    }
+    .player-controls .pbtn:active{ transform: translateY(1px); background: var(--pbtn-active); }
+    .player-controls .pbtn:focus-visible{
+      outline: 0;
+      box-shadow: 0 0 0 3px var(--pbtn-ring);
+    }
+    .player-controls label{
+      display:inline-flex; align-items:center; gap:8px; margin-left: 8px; color: #aeb7c8;
+      padding: 8px 10px; border-radius: 10px; border:1px solid #242c3e; background:#0b1120;
+    }
+    .player-controls input[type="range"]{ accent-color:#98d26c; }
+
     /* One-time audio consent overlay — starts hidden; shown only if autoplay blocked */
     #audio-consent{
       display:none; position:fixed; inset:0;
@@ -251,12 +288,12 @@
     <section class="music" aria-label="Music player">
       <div class="music-row">
         <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
-        <div class="controls">
-          <button id="prevBtn" title="Previous">⏮️</button>
-          <button id="playPauseBtn" title="Play/Pause">⏯️</button>
-          <button id="stopBtn" title="Stop">⏹️</button>
-          <button id="nextBtn" title="Next">⏭️</button>
-          <label style="display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#aeb7c8;">
+        <div class="player-controls">
+          <button id="prevBtn" class="pbtn" title="Previous">⏮️</button>
+          <button id="playPauseBtn" class="pbtn" title="Play/Pause">⏯️</button>
+          <button id="stopBtn" class="pbtn" title="Stop">⏹️</button>
+          <button id="nextBtn" class="pbtn" title="Next">⏭️</button>
+          <label>
             Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
           </label>
         </div>
@@ -269,7 +306,9 @@
         <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
       </div>
 
-      <audio id="player" preload="auto"></audio>
+      <!-- Two audio elements for crossfade; only one “active” at a time -->
+      <audio id="playerA" preload="auto" crossorigin="anonymous"></audio>
+      <audio id="playerB" preload="auto" crossorigin="anonymous"></audio>
     </section>
   </div>
 
@@ -306,7 +345,6 @@ function isSpecialPoem(){
 const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
 
 /* ======== MUSIC (library supplied by index.js) ======== */
-const MUSIC_DIR = "music/";
 const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
@@ -330,7 +368,8 @@ function prevFromBag(){ if (!bag.length) rebuildBag(); bagPos--; if (bagPos<0){ 
 /* ======== DOM ======== */
 const stage = document.getElementById('stage');
 const songTitleEl = document.getElementById('songTitle');
-const player = document.getElementById('player');
+const playerA = document.getElementById('playerA');
+const playerB = document.getElementById('playerB');
 const volRange = document.getElementById('volRange');
 const playPauseBtn = document.getElementById('playPauseBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -341,14 +380,15 @@ const curTimeEl = document.getElementById('curTime');
 const durTimeEl = document.getElementById('durTime');
 
 /* ======== Build Reorderable Rings ======== */
+/* Desktop DnD + Touch DnD, same as before (shortened to keep focus) */
 function buildRings(){
   stage.innerHTML = "";
   stacks = [];
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = true;                      // desktop HTML5 DnD
-    el.dataset.idx = String(i);               // base id
+    el.draggable = true;
+    el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
     drag.className = 'drag-handle';
@@ -366,183 +406,85 @@ function buildRings(){
     stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
   }
   wireDesktopDnD();
-  wireTouchDnD(); // NEW: iOS/Android drag
+  wireTouchDnD();
 }
-
-/* ======== Desktop (HTML5) DnD ======== */
 function wireDesktopDnD(){
   let dragSrc = null;
   stage.querySelectorAll('.ring').forEach(ring => {
-    ring.addEventListener('dragstart', (e) => {
-      dragSrc = ring;
-      e.dataTransfer.effectAllowed = 'move';
-      ring.classList.add('drag-over');
-    });
-    ring.addEventListener('dragend', () => {
-      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-      dragSrc = null;
-    });
+    ring.addEventListener('dragstart', (e) => { dragSrc = ring; e.dataTransfer.effectAllowed='move'; ring.classList.add('drag-over'); });
+    ring.addEventListener('dragend',   () => { stage.querySelectorAll('.ring').forEach(el=>el.classList.remove('drag-over','drop-before','drop-after')); dragSrc=null; });
     ring.addEventListener('dragover', (e) => {
       e.preventDefault();
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
+      const rect = ring.getBoundingClientRect(), midY = rect.top + rect.height/2;
       ring.classList.add('drag-over');
       ring.classList.toggle('drop-before', e.clientY < midY);
       ring.classList.toggle('drop-after',  e.clientY >= midY);
       e.dataTransfer.dropEffect = 'move';
     });
-    ring.addEventListener('dragleave', () => {
-      ring.classList.remove('drop-before','drop-after');
-    });
+    ring.addEventListener('dragleave', () => ring.classList.remove('drop-before','drop-after'));
     ring.addEventListener('drop', (e) => {
       e.preventDefault();
       if (!dragSrc || dragSrc === ring) return;
-
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
+      const rect = ring.getBoundingClientRect(), midY = rect.top + rect.height/2;
       const dropBefore = e.clientY < midY;
-
-      if (dropBefore) stage.insertBefore(dragSrc, ring);
-      else            stage.insertBefore(dragSrc, ring.nextSibling);
-
+      if (dropBefore) stage.insertBefore(dragSrc, ring); else stage.insertBefore(dragSrc, ring.nextSibling);
       rebuildStacksFromDOM();
       stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
     });
   });
 }
-
-/* ======== Mobile Touch/Pointer DnD ======== */
 function wireTouchDnD(){
   const rings = Array.from(stage.querySelectorAll('.ring'));
   rings.forEach(ring => {
     const handle = ring.querySelector('.drag-handle');
     if (!handle) return;
-
-    let dragging = false;
-    let draggedEl = null;
-    let startY = 0;
-    let currentY = 0;
-    let placeholder = null;
-
-    const onPointerDown = (ev) => {
-      // Only react to primary pointer/touch
-      if (ev.pointerType && ev.pointerType !== 'touch' && ev.pointerType !== 'mouse') return;
-      if (ev.button !== undefined && ev.button !== 0) return;
-
-      ev.preventDefault();
-      startY = ev.clientY || (ev.touches && ev.touches[0].clientY) || 0;
-      currentY = startY;
-      draggedEl = ring;
-      dragging = true;
-
-      // Visuals
-      draggedEl.classList.add('dragging');
-
-      // Create a placeholder directly after dragged element
-      placeholder = document.createElement('div');
-      placeholder.className = 'ring placeholder';
-      placeholder.style.height = getComputedStyle(draggedEl).height;
-      // Clone just the card styling for consistent height
-      const phCard = document.createElement('div');
-      phCard.className = 'card';
-      placeholder.appendChild(phCard);
-
-      draggedEl.parentNode.insertBefore(placeholder, draggedEl.nextSibling);
-
-      // While dragging, we temporarily use absolute positioning
-      const rect = draggedEl.getBoundingClientRect();
-      const stageRect = stage.getBoundingClientRect();
-      draggedEl.style.position = 'absolute';
-      draggedEl.style.left = rect.left - stageRect.left + 'px';
-      draggedEl.style.width = rect.width + 'px';
-      draggedEl.style.zIndex = 1000;
-      moveDragged(ev);
-
-      // Add listeners
-      window.addEventListener('pointermove', onPointerMove, {passive:false});
-      window.addEventListener('pointerup', onPointerUp, {passive:false, once:true});
-
-      // Fallback for touch-only devices
-      window.addEventListener('touchmove', onTouchMove, {passive:false});
-      window.addEventListener('touchend', onTouchEnd, {passive:false, once:true});
-    };
-
+    let dragging=false, draggedEl=null, placeholder=null, currentY=0;
     const moveDragged = (ev) => {
       const y = (ev.clientY || (ev.touches && ev.touches[0].clientY) || currentY);
       currentY = y;
       const stageRect = stage.getBoundingClientRect();
       const targetTop = y - stageRect.top - (draggedEl.offsetHeight/2);
       draggedEl.style.top = Math.max(0, targetTop) + 'px';
-
-      // Find ring under the touch point
       const el = document.elementFromPoint(stageRect.left + draggedEl.offsetWidth/2 + 1, y);
       const ringUnder = el ? el.closest('.ring') : null;
-
       if (ringUnder && ringUnder !== draggedEl && ringUnder !== placeholder){
         const rect = ringUnder.getBoundingClientRect();
         const midY = rect.top + rect.height/2;
-        if (y < midY){
-          stage.insertBefore(placeholder, ringUnder);
-        } else {
-          stage.insertBefore(placeholder, ringUnder.nextSibling);
-        }
+        if (y < midY) stage.insertBefore(placeholder, ringUnder);
+        else          stage.insertBefore(placeholder, ringUnder.nextSibling);
       }
     };
-
-    const onPointerMove = (ev) => {
-      if (!dragging) return;
+    const start = (ev) => {
+      if ((ev.pointerType && ev.pointerType!=='touch' && ev.pointerType!=='mouse') || (ev.button!==undefined && ev.button!==0)) return;
       ev.preventDefault();
+      draggedEl = ring; dragging=true; ring.classList.add('dragging');
+      placeholder = document.createElement('div'); placeholder.className='ring placeholder'; placeholder.style.height=getComputedStyle(ring).height;
+      const phc=document.createElement('div'); phc.className='card'; placeholder.appendChild(phc);
+      ring.parentNode.insertBefore(placeholder, ring.nextSibling);
+      const rect = ring.getBoundingClientRect(), stageRect = stage.getBoundingClientRect();
+      ring.style.position='absolute'; ring.style.left = rect.left - stageRect.left + 'px';
+      ring.style.width = rect.width + 'px'; ring.style.zIndex = 1000;
       moveDragged(ev);
+      const up = (e)=>{ e.preventDefault(); finish(); window.removeEventListener('pointermove', move, {passive:false}); window.removeEventListener('touchmove', move, {passive:false}); };
+      const move = (e)=>{ if(!dragging) return; e.preventDefault(); moveDragged(e); };
+      window.addEventListener('pointermove', move, {passive:false});
+      window.addEventListener('pointerup',   up,   {passive:false, once:true});
+      window.addEventListener('pointercancel', up, {passive:false, once:true});
+      window.addEventListener('touchmove', move, {passive:false});
+      window.addEventListener('touchend',  up,   {passive:false, once:true});
+      window.addEventListener('touchcancel', up, {passive:false, once:true});
     };
-    const onTouchMove = (ev) => {
+    const finish = () => {
       if (!dragging) return;
-      ev.preventDefault();
-      moveDragged(ev);
-    };
-
-    const finalizeDrop = () => {
-      // Place dragged element where the placeholder is
-      if (placeholder && placeholder.parentNode){
-        stage.insertBefore(draggedEl, placeholder);
-        placeholder.remove();
-        placeholder = null;
-      }
-      // Cleanup styles
-      draggedEl.style.position = '';
-      draggedEl.style.left = '';
-      draggedEl.style.top = '';
-      draggedEl.style.width = '';
-      draggedEl.style.zIndex = '';
-      draggedEl.classList.remove('dragging');
-
+      if (placeholder && placeholder.parentNode){ stage.insertBefore(ring, placeholder); placeholder.remove(); }
+      ring.style.position=''; ring.style.left=''; ring.style.top=''; ring.style.width=''; ring.style.zIndex='';
+      ring.classList.remove('dragging'); dragging=false; draggedEl=null; placeholder=null;
       rebuildStacksFromDOM();
-      dragging = false;
-      draggedEl = null;
     };
-
-    const onPointerUp = (ev) => {
-      ev.preventDefault();
-      finalizeDrop();
-      window.removeEventListener('pointermove', onPointerMove, {passive:false});
-      window.removeEventListener('touchmove', onTouchMove, {passive:false});
-    };
-    const onTouchEnd = (ev) => {
-      ev.preventDefault();
-      finalizeDrop();
-      window.removeEventListener('pointermove', onPointerMove, {passive:false});
-      window.removeEventListener('touchmove', onTouchMove, {passive:false});
-    };
-
-    // Pointer preferred, touch fallback
-    if (window.PointerEvent){
-      handle.addEventListener('pointerdown', onPointerDown, {passive:false});
-    } else {
-      handle.addEventListener('touchstart', (e)=>{ onPointerDown(e); }, {passive:false});
-    }
+    if (window.PointerEvent) handle.addEventListener('pointerdown', start, {passive:false});
+    else handle.addEventListener('touchstart', (e)=>start(e), {passive:false});
   });
 }
-
-/* Rebuild stacks in current DOM order after any drag (desktop or touch) */
 function rebuildStacksFromDOM(){
   const newStacks = [];
   stage.querySelectorAll('.ring').forEach(row => {
@@ -593,15 +535,16 @@ function startSpin(card){ card.classList.remove('spinning'); void card.offsetWid
 function stopSpin(card){ card.classList.remove('spinning'); }
 
 function unlockAudioOnce(){
-  if (player._unlocked) return;
+  const active = getActive();
+  if (active._unlocked) return;
   try {
-    player.volume = Number(volRange.value || 0.6);
-    const p = player.play();
+    active.volume = Number(volRange.value || 0.6);
+    const p = active.play();
     if (p && p.then){
-      p.then(() => { player.pause(); player.currentTime = 0; player._unlocked = true; })
-       .catch(() => { player._unlocked = true; });
-    } else { player._unlocked = true; }
-  } catch { player._unlocked = true; }
+      p.then(() => { active.pause(); active.currentTime = 0; active._unlocked = true; })
+       .catch(() => { active._unlocked = true; });
+    } else { active._unlocked = true; }
+  } catch { active._unlocked = true; }
 }
 
 function spinStair(){
@@ -625,80 +568,231 @@ function spinStair(){
       await playIndexForSpecial();
     } else {
       const idx = nextFromBag();
-      if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true});
+      if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
     }
   }, lastMidSwapTime + 60);
 }
 
-/* ======== Music player (simple) ======== */
+/* ======== Music player with crossfade ======== */
 function prettyName(filename){ return String(filename).replace(/\.[^/.]+$/,"").replace(/_/g," ").replace(/-/g," ").trim(); }
 function formatTime(t){ if (!isFinite(t)) return "0:00"; const m = Math.floor(t/60), s = Math.floor(t%60); return m + ":" + String(s).padStart(2,"0"); }
 function resetSeekUI(){ seekRange.value = 0; seekRange.max = 0; curTimeEl.textContent = "0:00"; durTimeEl.textContent = "0:00"; }
-function updatePlayStateUI(){ playPauseBtn.textContent = player.paused ? "▶️" : "⏸️"; }
-function isFatalAudioError(){ const c = player.error && player.error.code; return c === 3 || c === 4; }
 
-async function playIndex(i, {loop=false, advanceBagOnSuccess=false} = {}){
+let ACTIVE = 'A'; // which audio element is active: 'A' or 'B'
+function getActive(){ return ACTIVE === 'A' ? playerA : playerB; }
+function getIdle(){ return ACTIVE === 'A' ? playerB : playerA; }
+function swapPlayers(){ ACTIVE = (ACTIVE === 'A' ? 'B' : 'A'); }
+
+/* Keep UI updated for whichever player is active */
+function updateDurAndSeekOn(active){
+  seekRange.max = isFinite(active.duration) ? active.duration : 0;
+  durTimeEl.textContent = formatTime(active.duration);
+}
+function updatePlayStateUI(){
+  const active = getActive();
+  playPauseBtn.textContent = active.paused ? "▶️" : "⏸️";
+}
+
+function setTitle(tr, extra = ""){
+  songTitleEl.textContent = "♪ " + prettyName(tr.name) + (extra ? " " + extra : "");
+}
+
+function isFatalAudioError(audio){
+  const c = audio && audio.error && audio.error.code;
+  return c === 3 || c === 4;
+}
+
+/* Volume handling */
+function setMasterVolume(v){
+  v = Math.max(0, Math.min(1, v));
+  getActive().volume = v;
+  // idle may be in a fade; do not force it unless we’re fully swapped
+}
+volRange.addEventListener('input', () => setMasterVolume(Number(volRange.value)));
+
+/* Crossfade helper: linear fade between active and idle over --xfade-ms */
+function getXfadeMs(){
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--xfade-ms').trim();
+  if (!v) return 1800;
+  if (v.endsWith('ms')) return parseFloat(v)||1800;
+  if (v.endsWith('s')) return (parseFloat(v)||1.8)*1000;
+  return parseFloat(v)||1800;
+}
+
+async function crossfadeTo(url, titleObj){
+  const active = getActive();
+  const idle = getIdle();
+  const targetVol = Number(volRange.value || 0.6);
+
+  // Prepare idle
+  idle.onended = null;
+  idle.loop = false;
+  idle.src = url;
+  idle.load();
+  idle.volume = 0;
+
+  // Try play both (some mobile policies need prior gesture; we've got it)
+  try { await idle.play(); } catch(e) { /* will be handled by consent/controls */ }
+
+  // Fade
+  const dur = getXfadeMs();
+  const steps = Math.max(10, Math.floor(dur / 30));
+  let step = 0;
+
+  return new Promise((resolve) => {
+    const tick = () => {
+      step++;
+      const t = step / steps;
+      active.volume = targetVol * (1 - t);
+      idle.volume   = targetVol * (t);
+      if (step >= steps){
+        // finish
+        active.pause();
+        active.currentTime = 0;
+        idle.volume = targetVol;
+        swapPlayers();
+        // Update UI to new active
+        resetSeekUI();
+        if (isFinite(getActive().duration)) updateDurAndSeekOn(getActive());
+        setTitle(titleObj);
+        hookEnded(); // reattach onended to the new active
+        updatePlayStateUI();
+        resolve();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+/* Simple load (no crossfade) onto active */
+async function loadPlayOnActive(url, titleObj, {loop=false}={}){
+  const active = getActive();
+  active.onended = null;
+  active.loop = loop;
+  active.src = url;
+  active.load();
+  try { await active.play(); } catch(e){}
+  setTitle(titleObj);
+  resetSeekUI();
+  updateDurAndSeekOn(active);
+  updatePlayStateUI();
+  hookEnded();
+}
+
+/* Auto-advance on end (with crossfade) unless special looping */
+function hookEnded(){
+  const active = getActive();
+  active.onended = async () => {
+    // If we're looping (special track), do nothing
+    if (active.loop) return;
+
+    const nxt = nextFromBag();
+    if (typeof nxt !== 'number') return;
+    const tr = LIBRARY[nxt];
+    await crossfadeTo(tr.url, tr);
+    currentIndex = nxt;
+  };
+}
+
+/* Public controls, using the library "bag" */
+async function playIndex(i, {loop=false, advanceBagOnSuccess=false, crossfade=false} = {}){
   if (i < 0 || i >= LIBRARY.length) return;
   const tr = LIBRARY[i];
   try{
-    player.onended = null;
-    player.loop = loop;
-    resetSeekUI();
-    player.src = tr.url;
-    player.load();
-    songTitleEl.textContent = "♪ " + prettyName(tr.name);
-    const p = player.play();
-    if (p && p.catch){
-      await p.catch((err) => {
-        if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')){
-          updatePlayStateUI();
-          throw { _nonfatal: true, err };
-        }
-        throw err;
-      });
+    if (crossfade && !getActive().paused){
+      await crossfadeTo(tr.url, tr);
+    } else {
+      await loadPlayOnActive(tr.url, tr, {loop});
     }
     currentIndex = i;
-    updatePlayStateUI();
     if (advanceBagOnSuccess){
       const pos = bag.indexOf(i);
       if (pos !== -1) bagPos = pos;
     }
   } catch(e){
-    if (e && e._nonfatal) return;
-    if (isFatalAudioError()){
+    // If the audio element has a fatal error, blacklist and try next
+    if (isFatalAudioError(getActive())){
       BAD_TRACKS.add(tr.name);
       rebuildBag();
       const nxt = nextFromBag();
-      if (typeof nxt === 'number'){ await playIndex(nxt, {loop, advanceBagOnSuccess:true}); return; }
+      if (typeof nxt === 'number'){ await playIndex(nxt, {loop:false, advanceBagOnSuccess:true, crossfade:false}); return; }
     }
-    songTitleEl.textContent = "Audio error.";
-  }
-}
-async function playIndexForSpecial(){
-  try{
-    resetSeekUI();
-    player.onended = null;
-    player.loop = true;
-    player.src = SPECIAL_TRACK.url;
-    player.load();
-    songTitleEl.textContent = "♪ " + prettyName(SPECIAL_TRACK.name) + " — special";
-    const p = player.play(); if (p && p.catch){ await p.catch(()=>{}); }
-    updatePlayStateUI();
-  } catch(e){
-    songTitleEl.textContent = "Audio error (special).";
+    setTitle({name:"Audio error."});
   }
 }
 
-/* Player events */
+async function playIndexForSpecial(){
+  try{
+    // Stop both, then load special onto active and loop
+    playerA.pause(); playerB.pause();
+    playerA.currentTime = 0; playerB.currentTime = 0;
+    if (ACTIVE !== 'A') swapPlayers(); // ensure A is active (not required, but deterministic)
+
+    await loadPlayOnActive(SPECIAL_TRACK.url, {name: SPECIAL_TRACK.name + " — special"}, {loop:true});
+  } catch(e){
+    setTitle({name:"Audio error (special)."});
+  }
+}
+
+/* Player events (active only) */
 let seeking = false;
-player.addEventListener('loadedmetadata', () => { seekRange.max = isFinite(player.duration) ? player.duration : 0; durTimeEl.textContent = formatTime(player.duration); });
-player.addEventListener('timeupdate', () => { if (!seeking){ seekRange.value = player.currentTime || 0; curTimeEl.textContent = formatTime(player.currentTime); } });
+function activeLoadedMeta(){
+  const active = getActive();
+  seekRange.max = isFinite(active.duration) ? active.duration : 0;
+  durTimeEl.textContent = formatTime(active.duration);
+}
+function activeTimeUpdate(){
+  if (seeking) return;
+  const active = getActive();
+  seekRange.value = active.currentTime || 0;
+  curTimeEl.textContent = formatTime(active.currentTime);
+}
+playerA.addEventListener('loadedmetadata', activeLoadedMeta);
+playerB.addEventListener('loadedmetadata', activeLoadedMeta);
+playerA.addEventListener('timeupdate', activeTimeUpdate);
+playerB.addEventListener('timeupdate', activeTimeUpdate);
+
 seekRange.addEventListener('input', () => { seeking = true; curTimeEl.textContent = formatTime(Number(seekRange.value)); });
-seekRange.addEventListener('change', () => { player.currentTime = Number(seekRange.value); seeking = false; });
-playPauseBtn.addEventListener('click', async () => { if (player.paused){ try{ await player.play(); }catch{} } else { player.pause(); } updatePlayStateUI(); });
-stopBtn.addEventListener('click', () => { player.pause(); player.currentTime = 0; updatePlayStateUI(); });
-prevBtn.addEventListener('click', async () => { const idx = prevFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
-nextBtn.addEventListener('click', async () => { const idx = nextFromBag(); if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true}); });
+seekRange.addEventListener('change', () => {
+  const active = getActive();
+  active.currentTime = Number(seekRange.value);
+  seeking = false;
+});
+playPauseBtn.addEventListener('click', async () => {
+  const active = getActive();
+  if (active.paused){ try{ await active.play(); }catch{} }
+  else { active.pause(); }
+  updatePlayStateUI();
+});
+stopBtn.addEventListener('click', () => {
+  const active = getActive(), idle = getIdle();
+  // quick fadeout (300ms)
+  const startVol = active.volume, dur = 300, steps = Math.max(6, Math.floor(dur/30));
+  let step=0;
+  const tick = () => {
+    step++;
+    const t = step/steps;
+    active.volume = startVol*(1-t);
+    if (step>=steps){
+      active.pause(); active.currentTime=0; idle.pause(); idle.currentTime=0;
+      active.volume = Number(volRange.value || 0.6);
+      updatePlayStateUI(); resetSeekUI();
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+prevBtn.addEventListener('click', async () => {
+  const idx = prevFromBag();
+  if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
+});
+nextBtn.addEventListener('click', async () => {
+  const idx = nextFromBag();
+  if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
+});
 
 /* ======== Copy ======== */
 document.getElementById('copyBtn').addEventListener('click', async () => {
@@ -716,17 +810,15 @@ async function tryStartRandomSong() {
   await waitForLibraryReady();
   LIBRARY = window.LIBRARY || [];
   if (!LIBRARY.length) return false;
-  if (!bag.length) rebuildBag();
+  rebuildBag();
   try {
     const idx = nextFromBag();
     if (typeof idx === 'number') {
-      await playIndex(idx, { loop:false, advanceBagOnSuccess:true });
+      await playIndex(idx, { loop:false, advanceBagOnSuccess:true, crossfade:false });
       return true;
     }
     return false;
-  } catch(e){
-    return false;
-  }
+  } catch(e){ return false; }
 }
 function showAudioConsentOverlay() {
   const overlay = document.getElementById('audio-consent');
@@ -750,9 +842,7 @@ function showAudioConsentOverlay() {
   };
   btn.onclick = enable;
 
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) enable();
-  }, { once:false });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) enable(); }, { once:false });
 }
 async function attemptAutoplayOnOpen(){
   const ok = await tryStartRandomSong();
@@ -764,11 +854,13 @@ document.getElementById('spinBtn').addEventListener('click', spinStair);
 
 function initVolume(){
   const savedVol = Number(localStorage.getItem('poem_vol'));
-  if (!Number.isNaN(savedVol)) { player.volume = Math.max(0, Math.min(1, savedVol)); volRange.value = String(player.volume); }
-  else { player.volume = Number(volRange.value); }
+  const v = Number.isNaN(savedVol) ? Number(volRange.value) : Math.max(0, Math.min(1, savedVol));
+  playerA.volume = v; playerB.volume = 0; // active starts A
+  volRange.value = String(v);
   volRange.addEventListener('input', () => {
-    player.volume = Number(volRange.value);
-    localStorage.setItem('poem_vol', String(player.volume));
+    const val = Number(volRange.value);
+    getActive().volume = val;
+    localStorage.setItem('poem_vol', String(val));
   });
 }
 
@@ -782,8 +874,6 @@ waitForLibraryReady().then(() => {
   LIBRARY = window.LIBRARY || [];
   rebuildBag();
   seekRange.value = 0;
-
-  // Try to autoplay once the library is ready (quiet overlay if blocked)
   attemptAutoplayOnOpen();
 });
 
