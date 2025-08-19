@@ -483,7 +483,7 @@ function buildRings(){
 function wireDesktopDnD(){
   let dragSrcRing = null;
 
-  // Start/End drag on the RING (so the ring is the drag source)
+  // Drag starts/ends on the ring (source = ring)
   stage.querySelectorAll('.ring').forEach(ring => {
     ring.addEventListener('dragstart', (e) => {
       dragSrcRing = ring;
@@ -491,19 +491,18 @@ function wireDesktopDnD(){
       e.dataTransfer.effectAllowed = 'move';
       ring.classList.add('drag-over');
     });
-
     ring.addEventListener('dragend', () => {
       stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
       dragSrcRing = null;
     });
   });
 
-  // Use DELEGATION so child elements also count as valid drop targets
+  // DELEGATION so children count as valid targets
   stage.addEventListener('dragover', (e) => {
     if (!dragSrcRing) return;
     const ring = e.target.closest('.ring');
     if (!ring) return;
-    e.preventDefault(); // allow drop
+    e.preventDefault(); // REQUIRED so drop will fire on this target
     const rect = ring.getBoundingClientRect();
     const midY = rect.top + rect.height/2;
     ring.classList.add('drag-over');
@@ -522,18 +521,16 @@ function wireDesktopDnD(){
     const ring = e.target.closest('.ring');
     if (!ring) return;
     e.preventDefault();
-    e.stopPropagation();
 
     if (dragSrcRing !== ring){
       const rect = ring.getBoundingClientRect();
       const midY = rect.top + rect.height/2;
       const dropBefore = e.clientY < midY;
 
-      // Reorder DOM
       if (dropBefore) stage.insertBefore(dragSrcRing, ring);
       else            stage.insertBefore(dragSrcRing, ring.nextSibling);
 
-      // Rebuild stacks from new DOM order
+      // Rebuild stacks to match DOM order
       const newStacks = [];
       stage.querySelectorAll('.ring').forEach(row => {
         const found = stacks.find(s => s.el === row);
@@ -541,11 +538,10 @@ function wireDesktopDnD(){
       });
       stacks = newStacks;
 
-      // Immediately update poem after movement (ruleset)
+      // Ruleset: update poem immediately after movement
       renderPoem(true);
     }
 
-    // Clean visuals
     stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
     dragSrcRing = null;
   });
