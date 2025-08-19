@@ -292,6 +292,9 @@
 /* Ensure touch/absolute drag computes against the correct container */
 .stage{ position: relative; }
 
+
+/* Prevent touch scroll from hijacking drag on mobile */
+.drag-handle{ touch-action: none; -ms-touch-action: none; }
 </style>
 </head>
 <body>
