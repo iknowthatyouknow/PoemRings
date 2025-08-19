@@ -266,29 +266,31 @@
     }
   
 
-/* === Options box placed under player controls (ruleset-safe) === */
+/* === Strict ruleset-safe patches (do not alter visuals beyond requested) === */
 .options-box{
   display:flex;
-  justify-content:flex-start;  /* left aligned */
+  justify-content:flex-start;
   align-items:center;
-  margin-top:8px;              /* space below the player row */
+  margin-top:8px;
 }
-
-/* Reuse existing .options-col node; only add this class to control layout */
-.options-tray{
+.options-box .options-col{
   display:flex !important;
-  flex-direction: row !important;   /* horizontal: Play All then Repeat */
+  flex-direction: row !important;  /* horizontal: Play All then Repeat */
   align-items:center;
-  gap:12px;                         /* spacing between buttons */
+  gap:12px;                         /* spacing */
 }
-
-/* Keep existing .opt visuals; enforce horizontal alignment & single-line */
-.options-tray .opt{
+.options-box .options-col .opt{
   display:flex;
   align-items:center;
   gap:8px;
   white-space:nowrap;
 }
+
+/* Ensure the player icons are visibly sized inside the circular buttons */
+.pbtn svg{ width:28px; height:28px; }
+
+/* Ensure touch/absolute drag computes against the correct container */
+.stage{ position: relative; }
 
 </style>
 </head>
@@ -338,16 +340,20 @@
         </div>
 
         <!-- Options column (right) -->
-        <div class="options-col" aria-label="Playback options">
-          <label class="opt"><input id="optPlayAll" type="checkbox" /> Play All</label>
-          <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
-        </div>
+        
       </div>
 
       <div class="player-row">
         <div class="seek">
           <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
         </div>
+<div class="options-box">
+<div class="options-col" aria-label="Playback options">
+          <label class="opt"><input id="optPlayAll" type="checkbox" / checked> Play All</label>
+          <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
+        </div>
+</div>
+
         <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
       </div>
 
@@ -987,40 +993,6 @@ function generateSpecialPoem(){
   renderPoem(true);
   playIndexForSpecial();
 }
-</script>
-
-<script>
-
-// === Move Play All / Repeat into their own box under the player, ruleset-safe ===
-document.addEventListener('DOMContentLoaded', function(){
-  try {
-    const rows = document.querySelectorAll('.player-row');
-    if (!rows || !rows.length) return;
-    const firstRow = rows[0];
-
-    // Find the existing options container (keeps IDs & event bindings intact)
-    const tray = document.querySelector('.options-col');
-    if (!tray) return;
-
-    // Ensure Play All is auto-selected
-    const playAll = document.getElementById('optPlayAll');
-    if (playAll) playAll.checked = true;
-
-    // Add a layout class to enforce horizontal orientation
-    tray.classList.add('options-tray');
-
-    // Create a dedicated box and insert directly after the first player row
-    const box = document.createElement('div');
-    box.className = 'options-box';
-    if (firstRow.parentNode) {
-      firstRow.parentNode.insertBefore(box, firstRow.nextSibling);
-      box.appendChild(tray); // move the existing tray into the new box
-    }
-  } catch(e){
-    console.warn('Options box relocation skipped:', e);
-  }
-});
-
 </script>
 </body>
 </html>
