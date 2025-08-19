@@ -67,7 +67,7 @@
     }
 
     .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
-    .stage{ position: relative;  display: grid; gap: 14px; perspective: 1000px; }
+    .stage{ display: grid; gap: 14px; perspective: 1000px; }
 
     .ring{ position: relative; width: 100%; height: var(--ring-height);
            display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
@@ -264,7 +264,33 @@
       .time{ text-align: left; }
       .vol-wrap input[type="range"]{ width: 120px; }
     }
-  </style>
+  
+
+/* === Options box placed under player controls (ruleset-safe) === */
+.options-box{
+  display:flex;
+  justify-content:flex-start;  /* left aligned */
+  align-items:center;
+  margin-top:8px;              /* space below the player row */
+}
+
+/* Reuse existing .options-col node; only add this class to control layout */
+.options-tray{
+  display:flex !important;
+  flex-direction: row !important;   /* horizontal: Play All then Repeat */
+  align-items:center;
+  gap:12px;                         /* spacing between buttons */
+}
+
+/* Keep existing .opt visuals; enforce horizontal alignment & single-line */
+.options-tray .opt{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+}
+
+</style>
 </head>
 <body>
   <!-- Autoplay consent (shown only if autoplay is blocked) -->
@@ -961,6 +987,40 @@ function generateSpecialPoem(){
   renderPoem(true);
   playIndexForSpecial();
 }
+</script>
+
+<script>
+
+// === Move Play All / Repeat into their own box under the player, ruleset-safe ===
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    const rows = document.querySelectorAll('.player-row');
+    if (!rows || !rows.length) return;
+    const firstRow = rows[0];
+
+    // Find the existing options container (keeps IDs & event bindings intact)
+    const tray = document.querySelector('.options-col');
+    if (!tray) return;
+
+    // Ensure Play All is auto-selected
+    const playAll = document.getElementById('optPlayAll');
+    if (playAll) playAll.checked = true;
+
+    // Add a layout class to enforce horizontal orientation
+    tray.classList.add('options-tray');
+
+    // Create a dedicated box and insert directly after the first player row
+    const box = document.createElement('div');
+    box.className = 'options-box';
+    if (firstRow.parentNode) {
+      firstRow.parentNode.insertBefore(box, firstRow.nextSibling);
+      box.appendChild(tray); // move the existing tray into the new box
+    }
+  } catch(e){
+    console.warn('Options box relocation skipped:', e);
+  }
+});
+
 </script>
 </body>
 </html>
