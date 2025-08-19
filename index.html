@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Load the library loader FIRST (cache-busted) -->
-  <script src="index.js?v=9" defer></script>
+  <!-- Load the music library loader FIRST (cache-busted) -->
+  <script src="index.js?v=10" defer></script>
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>For Only You</title>
+  <title>If Only</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -35,7 +35,7 @@
       --drag-handle: #8aa0c9;
       --drop-hint: #3357ff55;
 
-      /* Player buttons (new visual) */
+      /* Player button visual tokens */
       --pbtn-bg1: #1c2741;
       --pbtn-bg2: #121b2f;
       --pbtn-border: #2b3854;
@@ -60,7 +60,7 @@
       place-items: center;
       min-height: 100vh;
       padding: 18px;
-      overflow-x: hidden; /* prevent horizontal spill on mobile */
+      overflow-x: hidden;
       overscroll-behavior: contain;
       -webkit-touch-callout: none;
       -webkit-tap-highlight-color: transparent;
@@ -90,8 +90,6 @@
       opacity: .25;
       outline: 2px dashed var(--drag-handle);
     }
-
-    .rim{ display:none; } /* decorative in older versions */
 
     .card{
       position: relative; width: 100%; height: 100%;
@@ -171,7 +169,7 @@
                      animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
     @keyframes slide { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
 
-    /* New elegant player controls */
+    /* Elegant player controls */
     .player-controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .pbtn{
       display:inline-flex; align-items:center; justify-content:center;
@@ -215,7 +213,7 @@
     .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
     .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
 
-    /* One-time audio consent overlay — starts hidden; shown only if autoplay blocked */
+    /* Autoplay consent overlay */
     #audio-consent{
       display:none; position:fixed; inset:0;
       background: rgba(0,0,0,.7); backdrop-filter: blur(2px);
@@ -229,8 +227,7 @@
 
     #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
 
-    /* ---------- Responsive (no structural changes) ---------- */
-
+    /* ---------- Responsive ---------- */
     @media (max-width: 768px){
       :root{ --ring-width: 96vw; --ring-height: 68px; }
       body{ padding: 14px; }
@@ -270,8 +267,8 @@
   </style>
 </head>
 <body>
-  <!-- One-time audio consent overlay (only displayed if autoplay is blocked) -->
-  <div id="audio-consent">
+  <!-- Autoplay consent (shown only if autoplay is blocked) -->
+  <div id="audio-consent" aria-hidden="true">
     <div class="card">
       <h2 style="margin:0 0 8px;">Enable sound?</h2>
       <p id="consent-msg" style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
@@ -294,7 +291,6 @@
     <div class="poem" id="poemBox" aria-live="polite">
       <div class="poem-header">
         <h2>Current Poem</h2>
-        <!-- Special badge is injected dynamically only when matched -->
       </div>
       <div id="poemFormatted" class="quote"></div>
       <div class="byline">~ by Aramish</div>
@@ -304,9 +300,10 @@
       <div class="music-row">
         <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
 
+        <!-- Player controls -->
         <div class="player-controls" aria-label="Playback controls">
           <button id="prevBtn" class="pbtn" title="Previous" aria-label="Previous track">⏮️</button>
-          <button id="playPauseBtn" class="pbtn" title="Play/Pause" aria-label="Play or pause">⏯️</button>
+          <button id="playPauseBtn" class="pbtn" title="Play/Pause" aria-label="Play or pause">▶️</button>
           <button id="stopBtn" class="pbtn" title="Stop" aria-label="Stop">⏹️</button>
           <button id="nextBtn" class="pbtn" title="Next" aria-label="Next track">⏭️</button>
           <span class="vol-wrap" aria-label="Volume">
@@ -314,7 +311,7 @@
           </span>
         </div>
 
-        <!-- Options column on the right, stacked -->
+        <!-- Options column (right) -->
         <div class="options-col" aria-label="Playback options">
           <label class="opt"><input id="optPlayAll" type="checkbox" /> Play All</label>
           <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
@@ -328,7 +325,7 @@
         <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
       </div>
 
-      <!-- Two audio elements for crossfade; only one “active” at a time -->
+      <!-- Two audio elements for seamless crossfade -->
       <audio id="playerA" preload="auto" crossorigin="anonymous"></audio>
       <audio id="playerB" preload="auto" crossorigin="anonymous"></audio>
     </section>
@@ -343,7 +340,6 @@ const RINGS_DATA = [
   ["Gentle As the Breath Before Dawn,","Her Voice Mends What fear has Broken,","Fire Wrapped in Grace,","Kindness Carved into Motion"],
   ["Dream in the Dawn,","Truth Without Armor, Steady in Light","The Horizon Waits for her Journey","She is Proof That Fate Wears Many Faces"]
 ];
-// Reorderable stacks
 let stacks = [];  // [{id, options:[...], currentIndex, card, span, el }]
 
 /* ---- SPECIAL POEM (strict) ---- */
@@ -366,7 +362,7 @@ function isSpecialPoem(){
 }
 const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
 
-/* ======== MUSIC (library supplied by index.js) ======== */
+/* ======== MUSIC (library supplied by index.js via window.LIBRARY) ======== */
 const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
@@ -386,7 +382,7 @@ function saveOptions(){
 optPlayAll.addEventListener('change', saveOptions);
 optRepeat.addEventListener('change',  saveOptions);
 
-/* ---------- Wait until tracks.json is ready ---------- */
+/* Wait for tracks.json */
 function waitForLibraryReady(){
   return new Promise((resolve) => {
     if (window.LIBRARY && window.LIBRARY.length) return resolve();
@@ -397,8 +393,8 @@ function waitForLibraryReady(){
   });
 }
 
-function fisherYatesShuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
-function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); fisherYatesShuffle(bag); bagPos=-1; }
+function shuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); shuffle(bag); bagPos=-1; }
 function nextFromBag(){ if (!bag.length) rebuildBag(); bagPos++; if (bagPos>=bag.length){ rebuildBag(); bagPos=0; } return bag[bagPos]; }
 function prevFromBag(){ if (!bag.length) rebuildBag(); bagPos--; if (bagPos<0){ rebuildBag(); bagPos=bag.length-1; } return bag[bagPos]; }
 
@@ -445,7 +441,7 @@ function buildRings(){
   wireTouchDnD();
 }
 
-/* Desktop DnD */
+/* Desktop Drag & Drop */
 function wireDesktopDnD(){
   let dragSrc = null;
   stage.querySelectorAll('.ring').forEach(ring => {
@@ -472,7 +468,7 @@ function wireDesktopDnD(){
   });
 }
 
-/* Mobile Touch/Pointer DnD */
+/* Touch/Pointer Drag & Drop for mobile */
 function wireTouchDnD(){
   const rings = Array.from(stage.querySelectorAll('.ring'));
   rings.forEach(ring => {
@@ -630,7 +626,7 @@ function updateDurAndSeekOn(active){
 }
 function updatePlayStateUI(){
   const active = getActive();
-  document.getElementById('playPauseBtn').textContent = active.paused ? "▶️" : "⏸️";
+  playPauseBtn.textContent = active.paused ? "▶️" : "⏸️";
 }
 function setTitle(tr, extra = ""){
   songTitleEl.textContent = "♪ " + prettyName(tr.name) + (extra ? " " + extra : "");
@@ -843,7 +839,7 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
   }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
 });
 
-/* ======== AUTOPLAY: try on open, else show consent (waits for library) ======== */
+/* ======== AUTOPLAY (on open): try; if blocked, show consent ======== */
 async function tryStartRandomSong() {
   await waitForLibraryReady();
   LIBRARY = window.LIBRARY || [];
@@ -864,27 +860,16 @@ function showAudioConsentOverlay() {
   const msg = document.getElementById('consent-msg');
   if (!overlay || !btn) return;
   overlay.style.display = 'flex';
-
   const enable = async () => {
-    await waitForLibraryReady();
-    LIBRARY = window.LIBRARY || [];
-    rebuildBag();
-
     const ok = await tryStartRandomSong();
     if (ok) {
-      localStorage.setItem('poem.audioConsent', '1');
       overlay.style.display = 'none';
       return;
     }
-    if (msg) msg.textContent = "Tap the ▶️ Play/Pause button once, then tap Enable Sound again.";
+    if (msg) msg.textContent = "Tap ▶️ once, then tap Enable Sound again.";
   };
   btn.onclick = enable;
-
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) enable(); }, { once:false });
-}
-async function attemptAutoplayOnOpen(){
-  const ok = await tryStartRandomSong();
-  if (!ok) showAudioConsentOverlay();
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) enable(); });
 }
 
 /* ======== Buttons & Init ======== */
@@ -902,6 +887,7 @@ function initVolume(){
   });
 }
 
+/* Persisted toggles */
 function loadPersisted(){
   loadOptions();
 }
@@ -912,19 +898,20 @@ renderPoem(true);
 initVolume();
 loadPersisted();
 
-/* Wait for the music library from index.js before building the bag */
+/* Wait for the music library and attempt autoplay */
 waitForLibraryReady().then(() => {
   LIBRARY = window.LIBRARY || [];
   rebuildBag();
   seekRange.value = 0;
-  attemptAutoplayOnOpen();
+  // Try autoplay; if blocked, show consent overlay
+  tryStartRandomSong().then((ok) => { if (!ok) showAudioConsentOverlay(); });
 });
 
 /* Hidden special test: Shift+S */
 document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
 document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
 function generateSpecialPoem(){
-  const picks = [0, 1, 2, 1, 2]; // exact indices for the special (by content order)
+  const picks = [0, 1, 2, 1, 2];
   picks.forEach((idx, i) => {
     stacks[i].currentIndex = idx;
     stacks[i].span.textContent = stacks[i].options[idx];
