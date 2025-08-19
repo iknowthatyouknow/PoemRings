@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>For You Only</title>
+  <title>For Only You</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -36,13 +36,14 @@
       --drop-hint: #3357ff55;
 
       /* Player buttons (new visual) */
-      --pbtn-bg1: #1a2233;
-      --pbtn-bg2: #131b2a;
-      --pbtn-border: #2a344a;
-      --pbtn-hover: #24304a;
-      --pbtn-active: #1b2740;
-      --pbtn-glow: 0 8px 22px rgba(0,0,0,.28);
-      --pbtn-ring: rgba(120,175,255,.25);
+      --pbtn-bg1: #1c2741;
+      --pbtn-bg2: #121b2f;
+      --pbtn-border: #2b3854;
+      --pbtn-hover1: #243253;
+      --pbtn-hover2: #15203a;
+      --pbtn-active: #0f1830;
+      --pbtn-ring: rgba(120,175,255,.35);
+      --pbtn-shadow: 0 10px 24px rgba(0,0,0,.35);
     }
 
     * { box-sizing: border-box; }
@@ -159,7 +160,9 @@
       border: 1px solid #21283a; border-radius: 14px; padding: 12px 14px;
       box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
     }
-    .music-row { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .music-row {
+      display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    }
     .ticker {
       position: relative; overflow: hidden; border:1px solid #242c3e; border-radius:10px;
       background: #0b1120; padding: 8px 12px; min-width: 240px; flex: 1;
@@ -168,6 +171,42 @@
                      animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
     @keyframes slide { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
 
+    /* New elegant player controls */
+    .player-controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .pbtn{
+      display:inline-flex; align-items:center; justify-content:center;
+      width: 44px; height: 44px; border-radius: 999px;
+      background: linear-gradient(180deg, var(--pbtn-bg1), var(--pbtn-bg2));
+      border: 1px solid var(--pbtn-border);
+      box-shadow: var(--pbtn-shadow), inset 0 0 0 1px rgba(255,255,255,0.03);
+      color: var(--text); font-size: 18px; font-weight: 700;
+      transition: transform .08s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease, filter .2s ease;
+      outline: none;
+    }
+    .pbtn:hover{
+      background: linear-gradient(180deg, var(--pbtn-hover1), var(--pbtn-hover2));
+      border-color: #3a4a6a;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,.28));
+    }
+    .pbtn:active{ transform: translateY(1px); background: var(--pbtn-active); }
+    .pbtn:focus-visible{ box-shadow: 0 0 0 3px var(--pbtn-ring); }
+
+    .vol-wrap{
+      display:inline-flex; align-items:center; gap:8px; margin-left: 8px; color: #aeb7c8;
+      padding: 8px 10px; border-radius: 12px; border:1px solid #242c3e; background:#0b1120;
+    }
+    .vol-wrap input[type="range"]{ accent-color:#98d26c; width: 140px; }
+
+    /* Options column (right side, stacked) */
+    .options-col{
+      display:flex; flex-direction:column; gap:8px; min-width: 140px;
+    }
+    .opt{
+      display:flex; align-items:center; gap:10px;
+      background:#0b1120; border:1px solid #242c3e; border-radius:10px; padding:8px 10px; color:#aeb7c8;
+    }
+    .opt input{ accent-color:#98d26c; }
+
     .player-row{
       display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
       background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 12px;
@@ -175,35 +214,6 @@
     .seek{ display:flex; align-items:center; gap:10px; flex:1; min-width: 160px; }
     .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
     .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
-
-    /* New, elegant player controls (visual-only) */
-    .player-controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .player-controls .pbtn{
-      position: relative;
-      display:inline-flex; align-items:center; justify-content:center;
-      gap:8px; padding: 10px 14px; min-width: 44px;
-      border-radius: 12px; font-weight:700; letter-spacing:.2px; cursor:pointer;
-      background: linear-gradient(180deg, var(--pbtn-bg1), var(--pbtn-bg2));
-      border: 1px solid var(--pbtn-border);
-      box-shadow: var(--pbtn-glow), inset 0 0 0 1px rgba(255,255,255,0.02);
-      color: var(--text);
-      transition: transform .06s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease, filter .2s ease;
-    }
-    .player-controls .pbtn:hover{
-      background: linear-gradient(180deg, var(--pbtn-hover), var(--pbtn-bg2));
-      border-color: #33415a;
-      filter: drop-shadow(0 4px 12px rgba(0,0,0,.25));
-    }
-    .player-controls .pbtn:active{ transform: translateY(1px); background: var(--pbtn-active); }
-    .player-controls .pbtn:focus-visible{
-      outline: 0;
-      box-shadow: 0 0 0 3px var(--pbtn-ring);
-    }
-    .player-controls label{
-      display:inline-flex; align-items:center; gap:8px; margin-left: 8px; color: #aeb7c8;
-      padding: 8px 10px; border-radius: 10px; border:1px solid #242c3e; background:#0b1120;
-    }
-    .player-controls input[type="range"]{ accent-color:#98d26c; }
 
     /* One-time audio consent overlay — starts hidden; shown only if autoplay blocked */
     #audio-consent{
@@ -231,6 +241,7 @@
       .controls button{ padding: 10px 14px; }
       .ticker{ min-width: 200px; }
       .player-row{ gap: 8px; }
+      .options-col{ min-width: 120px; }
     }
 
     @media (max-width: 480px){
@@ -248,9 +259,13 @@
       .music{ gap: 10px; padding: 10px 12px; }
       .music-row{ flex-direction: column; align-items: stretch; gap: 10px; }
       .ticker{ min-width: 0; width: 100%; }
+      .player-controls{ justify-content:center; }
+      .options-col{ flex-direction:row; justify-content:center; gap:12px; }
+      .opt{ width:auto; }
       .player-row{ flex-direction: column; align-items: stretch; gap: 8px; }
       .seek{ min-width: 0; }
       .time{ text-align: left; }
+      .vol-wrap input[type="range"]{ width: 120px; }
     }
   </style>
 </head>
@@ -288,14 +303,21 @@
     <section class="music" aria-label="Music player">
       <div class="music-row">
         <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
-        <div class="player-controls">
-          <button id="prevBtn" class="pbtn" title="Previous">⏮️</button>
-          <button id="playPauseBtn" class="pbtn" title="Play/Pause">⏯️</button>
-          <button id="stopBtn" class="pbtn" title="Stop">⏹️</button>
-          <button id="nextBtn" class="pbtn" title="Next">⏭️</button>
-          <label>
+
+        <div class="player-controls" aria-label="Playback controls">
+          <button id="prevBtn" class="pbtn" title="Previous" aria-label="Previous track">⏮️</button>
+          <button id="playPauseBtn" class="pbtn" title="Play/Pause" aria-label="Play or pause">⏯️</button>
+          <button id="stopBtn" class="pbtn" title="Stop" aria-label="Stop">⏹️</button>
+          <button id="nextBtn" class="pbtn" title="Next" aria-label="Next track">⏭️</button>
+          <span class="vol-wrap" aria-label="Volume">
             Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
-          </label>
+          </span>
+        </div>
+
+        <!-- Options column on the right, stacked -->
+        <div class="options-col" aria-label="Playback options">
+          <label class="opt"><input id="optPlayAll" type="checkbox" /> Play All</label>
+          <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
         </div>
       </div>
 
@@ -322,7 +344,7 @@ const RINGS_DATA = [
   ["Dream in the Dawn,","Truth Without Armor, Steady in Light","The Horizon Waits for her Journey","She is Proof That Fate Wears Many Faces"]
 ];
 // Reorderable stacks
-let stacks = [];  // [{id, options:[...], currentIndex, card, span, el}]
+let stacks = [];  // [{id, options:[...], currentIndex, card, span, el }]
 
 /* ---- SPECIAL POEM (strict) ---- */
 function normalizeLineStrict(s){
@@ -348,6 +370,21 @@ const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeU
 const BAD_TRACKS = new Set(); // fatal-only blacklist
 let LIBRARY = window.LIBRARY || [];
 let bag = [], bagPos = -1, currentIndex = -1;
+
+/* Playback options */
+const optPlayAll = document.getElementById('optPlayAll');
+const optRepeat  = document.getElementById('optRepeat');
+
+function loadOptions(){
+  optPlayAll.checked = localStorage.getItem('poem_playAll') === '1';
+  optRepeat.checked  = localStorage.getItem('poem_repeat')  === '1';
+}
+function saveOptions(){
+  localStorage.setItem('poem_playAll', optPlayAll.checked ? '1' : '0');
+  localStorage.setItem('poem_repeat',  optRepeat.checked  ? '1' : '0');
+}
+optPlayAll.addEventListener('change', saveOptions);
+optRepeat.addEventListener('change',  saveOptions);
 
 /* ---------- Wait until tracks.json is ready ---------- */
 function waitForLibraryReady(){
@@ -380,7 +417,6 @@ const curTimeEl = document.getElementById('curTime');
 const durTimeEl = document.getElementById('durTime');
 
 /* ======== Build Reorderable Rings ======== */
-/* Desktop DnD + Touch DnD, same as before (shortened to keep focus) */
 function buildRings(){
   stage.innerHTML = "";
   stacks = [];
@@ -408,6 +444,8 @@ function buildRings(){
   wireDesktopDnD();
   wireTouchDnD();
 }
+
+/* Desktop DnD */
 function wireDesktopDnD(){
   let dragSrc = null;
   stage.querySelectorAll('.ring').forEach(ring => {
@@ -433,6 +471,8 @@ function wireDesktopDnD(){
     });
   });
 }
+
+/* Mobile Touch/Pointer DnD */
 function wireTouchDnD(){
   const rings = Array.from(stage.querySelectorAll('.ring'));
   rings.forEach(ring => {
@@ -590,13 +630,11 @@ function updateDurAndSeekOn(active){
 }
 function updatePlayStateUI(){
   const active = getActive();
-  playPauseBtn.textContent = active.paused ? "▶️" : "⏸️";
+  document.getElementById('playPauseBtn').textContent = active.paused ? "▶️" : "⏸️";
 }
-
 function setTitle(tr, extra = ""){
   songTitleEl.textContent = "♪ " + prettyName(tr.name) + (extra ? " " + extra : "");
 }
-
 function isFatalAudioError(audio){
   const c = audio && audio.error && audio.error.code;
   return c === 3 || c === 4;
@@ -606,7 +644,6 @@ function isFatalAudioError(audio){
 function setMasterVolume(v){
   v = Math.max(0, Math.min(1, v));
   getActive().volume = v;
-  // idle may be in a fade; do not force it unless we’re fully swapped
 }
 volRange.addEventListener('input', () => setMasterVolume(Number(volRange.value)));
 
@@ -631,8 +668,7 @@ async function crossfadeTo(url, titleObj){
   idle.load();
   idle.volume = 0;
 
-  // Try play both (some mobile policies need prior gesture; we've got it)
-  try { await idle.play(); } catch(e) { /* will be handled by consent/controls */ }
+  try { await idle.play(); } catch(e) {}
 
   // Fade
   const dur = getXfadeMs();
@@ -646,12 +682,10 @@ async function crossfadeTo(url, titleObj){
       active.volume = targetVol * (1 - t);
       idle.volume   = targetVol * (t);
       if (step >= steps){
-        // finish
         active.pause();
         active.currentTime = 0;
         idle.volume = targetVol;
         swapPlayers();
-        // Update UI to new active
         resetSeekUI();
         if (isFinite(getActive().duration)) updateDurAndSeekOn(getActive());
         setTitle(titleObj);
@@ -681,18 +715,23 @@ async function loadPlayOnActive(url, titleObj, {loop=false}={}){
   hookEnded();
 }
 
-/* Auto-advance on end (with crossfade) unless special looping */
+/* Auto-advance on end (with crossfade) honoring Play All / Repeat */
 function hookEnded(){
   const active = getActive();
   active.onended = async () => {
-    // If we're looping (special track), do nothing
-    if (active.loop) return;
-
-    const nxt = nextFromBag();
-    if (typeof nxt !== 'number') return;
-    const tr = LIBRARY[nxt];
-    await crossfadeTo(tr.url, tr);
-    currentIndex = nxt;
+    if (optRepeat.checked){
+      active.currentTime = 0;
+      try { await active.play(); } catch(e) {}
+      return;
+    }
+    if (optPlayAll.checked){
+      const nxt = nextFromBag();
+      if (typeof nxt !== 'number') return;
+      const tr = LIBRARY[nxt];
+      await crossfadeTo(tr.url, tr);
+      currentIndex = nxt;
+    }
+    // If neither option checked: stop after current track
   };
 }
 
@@ -712,7 +751,6 @@ async function playIndex(i, {loop=false, advanceBagOnSuccess=false, crossfade=fa
       if (pos !== -1) bagPos = pos;
     }
   } catch(e){
-    // If the audio element has a fatal error, blacklist and try next
     if (isFatalAudioError(getActive())){
       BAD_TRACKS.add(tr.name);
       rebuildBag();
@@ -728,7 +766,7 @@ async function playIndexForSpecial(){
     // Stop both, then load special onto active and loop
     playerA.pause(); playerB.pause();
     playerA.currentTime = 0; playerB.currentTime = 0;
-    if (ACTIVE !== 'A') swapPlayers(); // ensure A is active (not required, but deterministic)
+    if (ACTIVE !== 'A') swapPlayers(); // deterministic
 
     await loadPlayOnActive(SPECIAL_TRACK.url, {name: SPECIAL_TRACK.name + " — special"}, {loop:true});
   } catch(e){
@@ -864,10 +902,15 @@ function initVolume(){
   });
 }
 
+function loadPersisted(){
+  loadOptions();
+}
+
 /* Build & start (v44 look preserved) */
 buildRings();
 renderPoem(true);
 initVolume();
+loadPersisted();
 
 /* Wait for the music library from index.js before building the bag */
 waitForLibraryReady().then(() => {
