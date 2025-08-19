@@ -454,7 +454,7 @@ function buildRings(){
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = false;                 // ← ring itself is NOT draggable
+    el.draggable = true;                 // ← Entire Ring draggable (desktop)
     el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
