@@ -14,7 +14,16 @@
       --line-stagger: 300ms;
       --line-fade-dur: 1200ms;
 
-      --panel-1: #0b1120;
+      /* Desktop defaults (match v44) */
+      --ring-width: 760px;
+      --ring-height: 76px;
+
+      /* Crossfade duration */
+      --xfade-ms: 1800ms;
+
+      --bg-1: #0e1117;
+      --bg-2: #0b0e14;
+      --panel: #121826;
       --panel-2: #141b2a;
       --stroke: #263047;
       --glow: rgba(0,0,0,.3);
@@ -29,74 +38,71 @@
       /* Player button visual tokens */
       --pbtn-bg1: #1c2741;
       --pbtn-bg2: #121b2f;
-      --pbtn-hover1: #223157;
-      --pbtn-hover2: #18223e;
+      --pbtn-border: #2b3854;
+      --pbtn-hover1: #243253;
+      --pbtn-hover2: #15203a;
       --pbtn-active: #0f1830;
-      --pbtn-ring: rgba(102, 153, 255, .35);
-
-      --card-w: min(680px, 92vw);
-      --card-gap: 14px;
+      --pbtn-ring: rgba(120,175,255,.35);
+      --pbtn-shadow: 0 10px 24px rgba(0,0,0,.35);
     }
 
-    html, body{
-      margin:0; padding:0; background: radial-gradient(120% 100% at 50% 0%, #0a1020 0%, #0a0f1a 38%, #080c16 100%);
-      color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans";
+      -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #161a23 0%, #0e121a 50%, #090b10 100%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 18px;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    .wrap{ max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; }
 
-    h1{
-      font-size: clamp(22px, 4.4vw, 28px);
-      margin: 0 0 12px 0; font-weight: 800; letter-spacing: .3px; text-align:center;
-      text-shadow: 0 6px 18px rgba(0,0,0,.35);
-    }
-    .subtitle{
-      color: var(--muted); text-align:center; margin: -4px auto 12px; font-size: clamp(13px, 3.3vw, 14px);
-      max-width: 780px;
-    }
+    .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
+    .stage{ display: grid; gap: 14px; perspective: 1000px; }
 
-    .stage{
-      margin: 18px auto; width: var(--card-w);
-      perspective: 1000px;
-    }
-    .ring{
-      position: relative;
-      background: linear-gradient(180deg, var(--panel-1), var(--panel-2));
-      border: 1px solid var(--stroke); border-radius: 14px;
-      padding: 12px; box-shadow: 0 20px 40px var(--glow), inset 0 0 0 1px #1a2236;
+    .ring{ position: relative; width: 100%; height: var(--ring-height);
+           display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
+    .drag-handle{
       user-select:none; -webkit-user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      cursor: grab; font-size: 20px; color: var(--drag-handle);
+      background: linear-gradient(180deg, #0e1423, #0b1120);
+      border-radius: 12px; margin-right: 10px; border:1px solid #202a3f;
+      min-width: 44px;
+      touch-action: none; /* allow custom drag on touch */
     }
-    .ring + .ring{ margin-top: var(--card-gap); }
+    .drag-handle:active{ cursor: grabbing; }
 
-    .ring-header{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      margin-bottom: 8px;
+    .ring.dragging .card{
+      box-shadow: inset 0 0 0 1px #2a3348, 0 16px 30px rgba(0,0,0,.45);
+      transform: translateZ(0.1px) scale(1.01);
     }
-    .ring-title{ font-weight: 800; color: #cdd6e8; letter-spacing:.3px; }
-    .drag{
-      flex: 0 0 auto; width:28px; height:28px; display:inline-grid; place-items:center;
-      border-radius: 8px; background: #0d1528; color: var(--drag-handle);
-      border:1px solid #253356; cursor:grab;
+    .ring.placeholder .card{
+      opacity: .25;
+      outline: 2px dashed var(--drag-handle);
     }
-    .ring.dragging{ opacity:.86; transform: scale(.995); box-shadow: 0 30px 50px rgba(0,0,0,.35); z-index: 20; }
-    .ring .drop-hint{ position:absolute; left:0; right:0; height:10px; opacity:0; pointer-events:none; }
-    .ring.drop-before::before,
-    .ring.drop-after::after{
-      content:""; position:absolute; left:8px; right:8px; height:6px; border-radius:8px; background: var(--drop-hint); opacity:1;
-      transform: translateZ(0.1px);
-    }
-    .ring.drop-before::before{ top:-5px; }
-    .ring.drop-after::after{ bottom:-5px; }
 
-    .cards{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 560px){
-      .cards{ grid-template-columns: 1fr; }
-    }
     .card{
-      display:flex; align-items:center; gap:6px;
-      border:1px solid #1f2a3e; background: #0d1526; padding: 10px; border-radius: 12px; color:#d9e1f2;
-      box-shadow: inset 0 0 0 1px #1b2438;
+      position: relative; width: 100%; height: 100%;
+      display: grid; place-items: center; padding: 0 18px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      box-shadow: inset 0 0 0 1px #2a3348, 0 10px 24px rgba(0,0,0,.28);
+      color: var(--text);
+      text-align: center; line-height: 1.25; letter-spacing: .2px;
+      overflow: hidden; transform: translateZ(0.1px);
+      backface-visibility: hidden; transform-style: preserve-3d;
     }
-    .card .no{ font-weight:800; width: 1.4em; color: #8fa5d2; text-align:center; }
+
     .card > span{
       display:block; width: 100%; white-space: normal;
       font-size: clamp(14px, 4.0vw, 18px);
@@ -109,19 +115,62 @@
 
     .controls{ display:flex; gap:10px; justify-content:center; align-items:center; flex-wrap: wrap; }
     button{
-      background: var(--btn); color: var(--text); border: 1px solid #29344b;
-      padding: 10px 14px; border-radius: 12px; cursor:pointer; box-shadow: 0 10px 20px rgba(0,0,0,.25);
+      background: var(--btn); color: var(--text); border: 1px solid #2b3449;
+      padding: 10px 16px; border-radius: 12px; cursor: pointer; font-weight: 700; letter-spacing: .2px;
+      transition: transform .06s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease;
+      display: inline-flex; align-items: center; gap: 8px;
     }
-    button:hover{ background: var(--btn-hover); }
-    button.secondary{ background: #0e1730; border-color:#253354; }
-    .cta{ background:#143c24; border-color:#254c33; }
+    button:hover{ background:var(--btn-hover); border-color:#35415a; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+    button:active{ transform: translateY(1px); }
 
-    /* Player row */
-    .player-row{
-      display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
-      background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 10px;
+    .tips{ color: var(--muted); font-size: 13px; text-align:center; margin-top: -6px; }
+
+    .poem{
+      background: linear-gradient(180deg, #101522, #0f1522);
+      border: 1px solid #21283a; border-radius: 14px; padding: 14px 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
     }
-    .pcluster{ display:flex; align-items:center; gap:8px; }
+    .poem-header{ display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px; }
+    .poem h2{ margin: 0; font-size: 1rem; color: var(--muted); font-weight: 700; letter-spacing: .3px; }
+    .special-badge{
+      display:inline-flex; align-items:center; gap:6px;
+      color: var(--special); background: rgba(255, 209, 102, 0.12);
+      border: 1px solid rgba(255,209,102,0.45); border-radius: 999px;
+      padding: 5px 10px; font-size: .88rem; font-weight: 700;
+      filter: drop-shadow(0 0 6px rgba(255,209,102,.35));
+    }
+    .poem .quote{
+      text-align:center;
+      font-size: clamp(18px, 5.2vw, 32px);
+      line-height: 1.35;
+      word-break: normal;
+    }
+    .poem .byline{ margin-top: 6px; text-align:center; color: var(--muted); font-size: .95rem; font-style: italic; }
+
+    .line { opacity: 0; transform: translateY(6px);
+            animation: lineFade var(--line-fade-dur) ease forwards; }
+    @keyframes lineFade { from { opacity: 0; transform: translateY(6px); }
+                          to   { opacity: 1; transform: translateY(0); } }
+
+    .music {
+      display: grid; gap: 12px;
+      background: linear-gradient(180deg, #0f1522, #0d1421);
+      border: 1px solid #21283a; border-radius: 14px; padding: 12px 14px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.25), inset 0 0 0 1px #222b3e;
+    }
+    .music-row {
+      display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+    }
+    .ticker {
+      position: relative; overflow: hidden; border:1px solid #242c3e; border-radius:10px;
+      background: #0b1120; padding: 8px 12px; min-width: 240px; flex: 1;
+    }
+    .ticker__inner { display:inline-block; white-space: nowrap; padding-left:100%;
+                     animation: slide 14s linear infinite; color: #5fb0ff; letter-spacing: .2px; }
+    @keyframes slide { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
+
+    /* Elegant player controls */
+    .player-controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .pbtn{
       display:inline-flex; align-items:center; justify-content:center;
       width: 44px; height: 44px; border-radius: 999px;
@@ -129,120 +178,137 @@
       border: 1px solid var(--pbtn-border);
       box-shadow: var(--pbtn-shadow), inset 0 0 0 1px rgba(255,255,255,0.03);
       color: var(--text); font-size: 18px; font-weight: 700;
-      transition: transform .08s ease, filter .2s ease, border-color .2s ease;
+      transition: transform .08s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease, filter .2s ease;
       outline: none;
     }
-    .pbtn:hover{ filter: brightness(1.05); }
-    .pbtn:active{ transform: translateY(1px) scale(.98); }
+    .pbtn:hover{
+      background: linear-gradient(180deg, var(--pbtn-hover1), var(--pbtn-hover2));
+      border-color: #3a4a6a;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,.28));
+    }
+    .pbtn:active{ transform: translateY(1px); background: var(--pbtn-active); }
     .pbtn:focus-visible{ box-shadow: 0 0 0 3px var(--pbtn-ring); }
-    .pbtn svg{ width: 28px; height: 28px; fill: currentColor; pointer-events:none; }
-
-    .ticker{
-      display:flex; gap:8px; align-items:center; min-width: 200px; flex: 1 1 260px;
-      border-radius: 12px; border:1px solid #242c3e; background:#0b1120;
-      padding: 8px 10px; overflow:hidden;
-    }
-    .ticker .now{ font-weight:700; color:#9bb7ff; }
-    .marquee{
-      white-space:nowrap; overflow:hidden; position:relative; width:100%;
-    }
-    .marquee span{
-      position:absolute; left:0; animation: scroll 16s linear infinite; color:#d2dbef;
-    }
-    @keyframes scroll{
-      0%{ transform: translateX(0%); } 100%{ transform: translateX(-100%); }
-    }
 
     .vol-wrap{
-      display:flex; align-items:center; gap:8px;
-      border-radius: 12px; border:1px solid #242c3e; background:#0b1120;
-      padding: 8px 10px;
+      display:inline-flex; align-items:center; gap:8px; margin-left: 8px; color: #aeb7c8;
+      padding: 8px 10px; border-radius: 12px; border:1px solid #242c3e; background:#0b1120;
     }
     .vol-wrap input[type="range"]{ accent-color:#98d26c; width: 140px; }
 
-    /* Options column (right side) — always horizontal */
+    /* Options column (right side, stacked) */
     .options-col{
-      display:flex; flex-direction:row; align-items:center; gap:8px; min-width: 140px; flex-wrap:nowrap;
+      display:flex; flex-direction: row; gap:8px; min-width: 140px;
     }
     .opt{
-      display:flex; align-items:center; gap:10px; white-space:nowrap;
+      display:flex; align-items:center; gap:10px;
       background:#0b1120; border:1px solid #242c3e; border-radius:10px; padding:8px 10px; color:#aeb7c8;
     }
     .opt input{ accent-color:#98d26c; }
 
-    /* Ring stack grid */
-    .stack{
-      display:grid; gap:10px;
+    .player-row{
+      display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+      background:#0c1220; border:1px solid #242c3e; border-radius:10px; padding:8px 12px;
+    }
+    .seek{ display:flex; align-items:center; gap:10px; flex:1; min-width: 160px; }
+    .seek input[type="range"]{ width: 100%; accent-color:#98d26c; }
+    .time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 94px; text-align:right; }
+
+    /* Autoplay consent overlay */
+    #audio-consent{
+      display:none; position:fixed; inset:0;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(2px);
+      z-index: 9999; color:#fff; align-items:center; justify-content:center; text-align:center; padding:24px;
+    }
+    #audio-consent .card{
+      background:#11161c; border:1px solid #26313d; border-radius:14px; padding:18px 16px; max-width:520px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    #consent-msg{ font-size:.92rem; opacity:.9; }
+
+    #testSpecialBtn { position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden; }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 768px){
+      :root{ --ring-width: 96vw; --ring-height: 68px; }
+      body{ padding: 14px; }
+      .wrap{ gap: 12px; }
+      .stage{ gap: 12px; }
+      .drag-handle{ font-size: 18px; min-width: 40px; }
+      .poem .quote{ font-size: clamp(18px, 4.8vw, 28px); }
+      .controls button{ padding: 10px 14px; }
+      .ticker{ min-width: 200px; }
+      .player-row{ gap: 8px; }
+      .options-col{ min-width: 120px; }
     }
 
-    /* Poem reveal */
-    .poem-area{
-      margin: 16px auto 24px; width: var(--card-w);
-      border:1px solid #24324b; border-radius: 14px; background:#0c1323; padding: 12px 14px;
-    }
-    .poem-area h3{ margin: 0 0 6px; font-size: 14px; color:#a9b5cb; font-weight:800; }
-    .poem-lines{ margin: 8px 0 8px; padding: 0 4px; }
-    .line-item{
-      font-style: italic; opacity:0;
-      animation: poemFade var(--line-fade-dur) ease forwards;
-    }
-    @keyframes poemFade{
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0px); }
-    }
+    @media (max-width: 480px){
+      :root{ --ring-width: 96vw; --ring-height: 56px; }
+      body{ padding: 10px; }
+      .wrap{ gap: 10px; }
+      .stage{ gap: 10px; }
+      .drag-handle{ font-size: 18px; min-width: 36px; }
+      .card{ padding: 0 14px; }
+      .card > span{ font-size: clamp(14px, 4.5vw, 17px); }
 
-    .footer-row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
-    .hint{ color:#9ba8c3; font-size:13px; }
+      .controls{ gap: 8px; }
+      .controls button{ padding: 10px 12px; }
 
-    .hidden{ display:none !important; }
-  </style>
+      .music{ gap: 10px; padding: 10px 12px; }
+      .music-row{ flex-direction: column; align-items: stretch; gap: 10px; }
+      .ticker{ min-width: 0; width: 100%; }
+      .player-controls{ justify-content:center; }
+      .options-col{ flex-direction: row; justify-content:center; gap:12px; }
+      .opt{ width:auto; }
+      .player-row{ flex-direction: column; align-items: stretch; gap: 8px; }
+      .seek{ min-width: 0; }
+      .time{ text-align: left; }
+      .vol-wrap input[type="range"]{ width: 120px; }
+    }
+  
+.pbtn svg{ width:28px; height:28px; }
+</style>
 </head>
 <body>
+  <!-- Autoplay consent (shown only if autoplay is blocked) -->
+  <div id="audio-consent" aria-hidden="true">
+    <div class="card">
+      <h2 style="margin:0 0 8px;">Enable sound?</h2>
+      <p id="consent-msg" style="margin:0 0 16px;">Tap once to allow background music. We’ll remember this for next time.</p>
+      <button id="audio-consent-btn" style="padding:10px 16px; border:0; border-radius:8px; font-weight:600; cursor:pointer;">Enable Sound</button>
+    </div>
+  </div>
+
+  <!-- Hidden special-test button (also Shift+S) -->
+  <button id="testSpecialBtn" aria-label="Generate special poem">hidden</button>
+
   <div class="wrap">
-    <h1>If Only</h1>
-    <div class="subtitle">Spin the rings. Each top-to-bottom read produces a new poem. Music plays with each generate.</div>
+    <div class="stage" id="stage"></div>
+    <div class="tips">Drag the ⋮⋮ handle to reorder rings (top = first line)</div>
 
-    <div class="stage">
-      <!-- Rings stack -->
-      <div id="stack" class="stack" aria-label="Rings, drag to reorder">
-        <!-- (Rings injected here by script) -->
+    <div class="controls">
+      <button id="spinBtn">✨ Create Your Next Poem</button>
+      <button id="copyBtn">📋 Copy poem</button>
+    </div>
+
+    <div class="poem" id="poemBox" aria-live="polite">
+      <div class="poem-header">
+        <h2>Current Poem</h2>
       </div>
+      <div id="poemFormatted" class="quote"></div>
+      <div class="byline">~ by Aramish</div>
+    </div>
 
-      <!-- Player + options -->
-      <div class="player-row" aria-label="Player and options">
-        <div class="pcluster">
-          <button id="prevBtn" class="pbtn" title="Previous" aria-label="Previous track">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 5v14h2V5H7zM10 12l9 6V6l-9 6z"/>
-            </svg>
-          </button>
+    <section class="music" aria-label="Music player">
+      <div class="music-row">
+        <div class="ticker" title="Current song"><div id="songTitle" class="ticker__inner">—</div></div>
 
-          <button id="playPauseBtn" class="pbtn" title="Play/Pause" aria-label="Play or pause">
-            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14l11-7-11-7z"/>
-            </svg>
-          </button>
-
-          <button id="stopBtn" class="pbtn" title="Stop" aria-label="Stop">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6h12v12H6z"/>
-            </svg>
-          </button>
-
-          <button id="nextBtn" class="pbtn" title="Next" aria-label="Next track">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M15 5v14h2V5h-2zM5 6v12l9-6-9-6z"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="ticker" aria-live="polite">
-          <span class="now">Now Playing:</span>
-          <div class="marquee"><span id="nowTitle">—</span></div>
-        </div>
-
-        <div class="vol-wrap">
-          <span aria-label="Volume">
+        <!-- Player controls -->
+        <div class="player-controls" aria-label="Playback controls">
+          <button id="prevBtn" class="pbtn" title="Previous" aria-label="Previous track">⏮️</button>
+          <button id="playPauseBtn" class="pbtn" title="Play/Pause" aria-label="Play or pause">▶️</button>
+          <button id="stopBtn" class="pbtn" title="Stop" aria-label="Stop">⏹️</button>
+          <button id="nextBtn" class="pbtn" title="Next" aria-label="Next track">⏭️</button>
+          <span class="vol-wrap" aria-label="Volume">
             Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
           </span>
         </div>
@@ -255,170 +321,637 @@
       </div>
 
       <div class="player-row">
-        <div class="pcluster">
-          <button id="spinBtn" class="cta" aria-label="Spin and generate poem">Spin / Generate</button>
-          <button id="copyBtn" class="secondary" aria-label="Copy the current poem">Copy Poem</button>
-          <button id="testSpecialBtn" class="secondary" aria-label="Trigger special poem">Special Poem</button>
+        <div class="seek">
+          <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
         </div>
+        <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
       </div>
 
-      <div class="poem-area">
-        <h3>Poem</h3>
-        <div id="poemLines" class="poem-lines"></div>
-      </div>
-
-      <div class="footer-row">
-        <span class="hint">Tip: Drag the rings to reorder. Tap “Spin” to animate and reveal a new poem.</span>
-      </div>
-    </div>
+      <!-- Two audio elements for seamless crossfade -->
+      <audio id="playerA" preload="auto" crossorigin="anonymous"></audio>
+      <audio id="playerB" preload="auto" crossorigin="anonymous"></audio>
+    </section>
   </div>
 
 <script>
-/* ======== DATA (preserved; do not alter poem content) ======== */
-/* Example placeholder; your real rings and lines are injected by your existing logic elsewhere. */
-const RINGS = [
-  { id: 1, title: "Ring 1", lines: ["Line 1", "Line 2", "Line 3", "Line 4"] },
-  { id: 2, title: "Ring 2", lines: ["Line 1", "Line 2", "Line 3", "Line 4"] },
-  { id: 3, title: "Ring 3", lines: ["Line 1", "Line 2", "Line 3", "Line 4"] },
-  { id: 4, title: "Ring 4", lines: ["Line 1", "Line 2", "Line 3", "Line 4"] },
-  { id: 5, title: "Ring 5", lines: ["Line 1", "Line 2", "Line 3", "Line 4"] },
+/* ======== POEMS: 5 rings × 4 lines ======== */
+const RINGS_DATA = [
+  ["Strength in Silence,","Grace Without Seeking, Calm in a Storm,","The World Bends Gentler Near her Soul","She is Proof That Kindness is a Force"],
+  ["Hope Carried in Quiet Hands,","Stillness that softens the Sharpest Edge,","She Listens Where Most Would Speak","And Builds with the Weight of Care"],
+  ["She Moves Like Morning Light,","Patience Carved into the Day,","Every Step Writes Peace in Stone","Her Silence Steadies The Storm"],
+  ["Gentle As the Breath Before Dawn,","Her Voice Mends What fear has Broken,","Fire Wrapped in Grace,","Kindness Carved into Motion"],
+  ["Dream in the Dawn,","Truth Without Armor, Steady in Light","The Horizon Waits for her Journey","She is Proof That Fate Wears Many Faces"]
 ];
+let stacks = [];  // [{id, options:[...], currentIndex, card, span, el }]
 
-/* ======== DOM references ======== */
-const stackEl = document.getElementById('stack');
-const poemLinesEl = document.getElementById('poemLines');
-const spinBtn = document.getElementById('spinBtn');
-const copyBtn = document.getElementById('copyBtn');
-const nowTitle = document.getElementById('nowTitle');
+/* ---- SPECIAL POEM (strict) ---- */
+function normalizeLineStrict(s){
+  return String(s || "")
+    .replace(/[“”"']/g, "")
+    .replace(/\s*[,;:!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+function isSpecialPoem(){
+  const now = currentLines().map(normalizeLineStrict);
+  return now.length === 5 &&
+         now[0] === "strength in silence" &&
+         now[1] === "stillness that softens the sharpest edge" &&
+         now[2] === "every step writes peace in stone" &&
+         now[3] === "her voice mends what fear has broken" &&
+         now[4] === "the horizon waits for her journey";
+}
+const SPECIAL_TRACK = { name: "Sparks_For_Only_You.mp3", url: "music/" + encodeURIComponent("Sparks_For_Only_You.mp3") };
+
+/* ======== MUSIC (library supplied by index.js via window.LIBRARY) ======== */
+const BAD_TRACKS = new Set(); // fatal-only blacklist
+let LIBRARY = window.LIBRARY || [];
+let bag = [], bagPos = -1, currentIndex = -1;
+
+/* Playback options */
+const optPlayAll = document.getElementById('optPlayAll');
+const optRepeat  = document.getElementById('optRepeat');
+
+function loadOptions(){
+  optPlayAll.checked = localStorage.getItem('poem_playAll') === '1';
+  optRepeat.checked  = localStorage.getItem('poem_repeat')  === '1';
+}
+function saveOptions(){
+  localStorage.setItem('poem_playAll', optPlayAll.checked ? '1' : '0');
+  localStorage.setItem('poem_repeat',  optRepeat.checked  ? '1' : '0');
+}
+optPlayAll.addEventListener('change', saveOptions);
+optRepeat.addEventListener('change',  saveOptions);
+
+/* Wait for tracks.json */
+function waitForLibraryReady(){
+  return new Promise((resolve) => {
+    if (window.LIBRARY && window.LIBRARY.length) return resolve();
+    if (window.musicReady && typeof window.musicReady.then === 'function'){
+      window.musicReady.then(resolve); return;
+    }
+    window.addEventListener('musicReady', resolve, { once: true });
+  });
+}
+
+function shuffle(arr){ for (let i = arr.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function rebuildBag(){ bag = LIBRARY.map((_,i)=>i).filter(i => !BAD_TRACKS.has(LIBRARY[i].name)); if (!bag.length) bag = LIBRARY.map((_,i)=>i); shuffle(bag); bagPos=-1; }
+function nextFromBag(){ if (!bag.length) rebuildBag(); bagPos++; if (bagPos>=bag.length){ rebuildBag(); bagPos=0; } return bag[bagPos]; }
+function prevFromBag(){ if (!bag.length) rebuildBag(); bagPos--; if (bagPos<0){ rebuildBag(); bagPos=bag.length-1; } return bag[bagPos]; }
+
+/* ======== DOM ======== */
+const stage = document.getElementById('stage');
+const songTitleEl = document.getElementById('songTitle');
+const playerA = document.getElementById('playerA');
+const playerB = document.getElementById('playerB');
+const volRange = document.getElementById('volRange');
 const playPauseBtn = document.getElementById('playPauseBtn');
 const stopBtn = document.getElementById('stopBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
-const volRange = document.getElementById('volRange');
-const optPlayAll = document.getElementById('optPlayAll');
-const optRepeat = document.getElementById('optRepeat');
+const seekRange = document.getElementById('seekRange');
+const curTimeEl = document.getElementById('curTime');
+const durTimeEl = document.getElementById('durTime');
 
-/* ======== Simple player harness using window.LIBRARY (from index.js) ======== */
-const audio = new Audio();
-let trackIndex = 0;
-
-function getActive(){ return audio; }
-function setNowTitle(txt){ nowTitle.textContent = txt || '—'; }
-function loadTrack(i){
-  const list = (window.LIBRARY && window.LIBRARY.tracks) || [];
-  if (!list.length) return;
-  trackIndex = (i + list.length) % list.length;
-  audio.src = 'music/' + list[trackIndex].file;
-  setNowTitle(list[trackIndex].title || list[trackIndex].file);
-}
-function playCurrent(){
-  audio.play().catch(()=>{ /* autoplay may require user gesture; handled elsewhere */ });
-  updatePlayStateUI();
-}
-function pauseCurrent(){ audio.pause(); updatePlayStateUI(); }
-function stopCurrent(){ audio.pause(); audio.currentTime = 0; updatePlayStateUI(); }
-function nextTrack(){ loadTrack(trackIndex + 1); playCurrent(); }
-function prevTrack(){ loadTrack(trackIndex - 1); playCurrent(); }
-
-function updatePlayStateUI(){
-  const active = getActive();
-  playPauseBtn.innerHTML = active.paused
-    ? '<svg class="icon-play"  viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7-11-7z"/></svg>'
-    : '<svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
-}
-
-/* Events */
-playPauseBtn.addEventListener('click', () => (audio.paused ? playCurrent() : pauseCurrent()));
-stopBtn.addEventListener('click', stopCurrent);
-nextBtn.addEventListener('click', nextTrack);
-prevBtn.addEventListener('click', prevTrack);
-volRange.addEventListener('input', e => { audio.volume = +e.target.value; });
-
-audio.addEventListener('ended', () => {
-  const list = (window.LIBRARY && window.LIBRARY.tracks) || [];
-  if (!list.length) return;
-  if (optRepeat.checked) { playCurrent(); return; }
-  if (optPlayAll.checked) { nextTrack(); return; }
-  updatePlayStateUI();
-});
-
-/* ======== Ring rendering (structure preserved) ======== */
-function renderRings(){
-  stackEl.innerHTML = '';
-  RINGS.forEach((ring, ri) => {
-    const ringEl = document.createElement('div');
-    ringEl.className = 'ring';
-    ringEl.draggable = true;
-    ringEl.dataset.index = ri;
-
-    const header = document.createElement('div');
-    header.className = 'ring-header';
-
-    const title = document.createElement('div');
-    title.className = 'ring-title';
-    title.textContent = ring.title || `Ring ${ri+1}`;
+/* ======== Build Reorderable Rings ======== */
+function buildRings(){
+  stage.innerHTML = "";
+  stacks = [];
+  for (let i = 0; i < RINGS_DATA.length; i++){
+    const el = document.createElement('div');
+    el.className = 'ring';
+    el.draggable = false;                 // ← ring itself is NOT draggable
+    el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
-    drag.className = 'drag';
-    drag.title = 'Drag to reorder';
-    drag.textContent = '⠿';
+    drag.className = 'drag-handle';
+    drag.title = "Drag to reorder";
+    drag.textContent = "⋮⋮";
+    drag.setAttribute('draggable','true'); // ← handle IS draggable
 
-    header.appendChild(title);
-    header.appendChild(drag);
+    const card = document.createElement('div'); 
+    card.className = 'card';
+    const span = document.createElement('span'); 
+    span.textContent = RINGS_DATA[i][0];
+    card.appendChild(span);
 
-    const cards = document.createElement('div');
-    cards.className = 'cards';
-    ring.lines.forEach((line, li) => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      const no = document.createElement('div');
-      no.className = 'no';
-      no.textContent = (li+1)+'.';
-      const span = document.createElement('span');
-      span.textContent = line;
-      card.appendChild(no); card.appendChild(span);
-      cards.appendChild(card);
+    el.appendChild(drag);
+    el.appendChild(card);
+    stage.appendChild(el);
+
+    stacks.push({ id:i, options:[...RINGS_DATA[i]], currentIndex:0, card, span, el });
+  }
+  wireDesktopDnD();
+  wireTouchDnD();
+}
+
+/* Desktop Drag & Drop */
+function wireDesktopDnD(){
+  let dragSrcRing = null;
+
+  // Attach to the HANDLE, not the ring
+  stage.querySelectorAll('.ring .drag-handle').forEach(handle => {
+    const ring = handle.closest('.ring');
+
+    handle.addEventListener('dragstart', (e) => {
+      dragSrcRing = ring;
+      // Safari requires setData or DnD won't start
+      try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {}
+      e.dataTransfer.effectAllowed = 'move';
+      ring.classList.add('drag-over');
     });
 
-    ringEl.appendChild(header);
-    ringEl.appendChild(cards);
-    stackEl.appendChild(ringEl);
+    handle.addEventListener('dragend', () => {
+      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+      dragSrcRing = null;
+    });
+  });
+
+  // The drop targets are the rings themselves
+  stage.querySelectorAll('.ring').forEach(ring => {
+    ring.addEventListener('dragover', (e) => {
+      if (!dragSrcRing) return;
+      e.preventDefault();                 // required to allow drop
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
+      ring.classList.add('drag-over');
+      ring.classList.toggle('drop-before', e.clientY < midY);
+      ring.classList.toggle('drop-after',  e.clientY >= midY);
+      e.dataTransfer.dropEffect = 'move';
+    });
+
+    ring.addEventListener('dragleave', () => {
+      ring.classList.remove('drop-before','drop-after');
+    });
+
+    ring.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!dragSrcRing || dragSrcRing === ring) return;
+
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
+      const dropBefore = e.clientY < midY;
+
+      // Reorder DOM
+      if (dropBefore) stage.insertBefore(dragSrcRing, ring);
+      else            stage.insertBefore(dragSrcRing, ring.nextSibling);
+
+      // Rebuild stacks array according to new DOM order
+      const newStacks = [];
+      stage.querySelectorAll('.ring').forEach(row => {
+        const found = stacks.find(s => s.el === row);
+        if (found) newStacks.push(found);
+      });
+      stacks = newStacks;
+
+      // Clean up classes
+      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+      dragSrcRing = null;
+    });
   });
 }
 
-/* ======== Poem render ======== */
-function renderPoem(animate = true){
-  poemLinesEl.innerHTML = '';
-  const topLines = [0,1,2,3].map(i => {
-    // take i-th line from the ring currently at position i
-    const ring = RINGS[i] || RINGS[RINGS.length-1];
-    return ring.lines[i] || '';
+/* Touch/Pointer Drag & Drop for mobile */
+function wireTouchDnD(){
+  const rings = Array.from(stage.querySelectorAll('.ring'));
+  rings.forEach(ring => {
+    const handle = ring.querySelector('.drag-handle');
+    if (!handle) return;
+    let dragging=false, draggedEl=null, placeholder=null, currentY=0;
+    const moveDragged = (ev) => {
+      const y = (ev.clientY || (ev.touches && ev.touches[0].clientY) || currentY);
+      currentY = y;
+      const stageRect = stage.getBoundingClientRect();
+      const targetTop = y - stageRect.top - (draggedEl.offsetHeight/2);
+      draggedEl.style.top = Math.max(0, targetTop) + 'px';
+      const el = document.elementFromPoint(stageRect.left + draggedEl.offsetWidth/2 + 1, y);
+      const ringUnder = el ? el.closest('.ring') : null;
+      if (ringUnder && ringUnder !== draggedEl && ringUnder !== placeholder){
+        const rect = ringUnder.getBoundingClientRect();
+        const midY = rect.top + rect.height/2;
+        if (y < midY) stage.insertBefore(placeholder, ringUnder);
+        else          stage.insertBefore(placeholder, ringUnder.nextSibling);
+      }
+    };
+    const start = (ev) => {
+      if ((ev.pointerType && ev.pointerType!=='touch' && ev.pointerType!=='mouse') || (ev.button!==undefined && ev.button!==0)) return;
+      ev.preventDefault();
+      draggedEl = ring; dragging=true; ring.classList.add('dragging');
+      placeholder = document.createElement('div'); placeholder.className='ring placeholder'; placeholder.style.height=getComputedStyle(ring).height;
+      const phc=document.createElement('div'); phc.className='card'; placeholder.appendChild(phc);
+      ring.parentNode.insertBefore(placeholder, ring.nextSibling);
+      const rect = ring.getBoundingClientRect(), stageRect = stage.getBoundingClientRect();
+      ring.style.position='absolute'; ring.style.left = rect.left - stageRect.left + 'px';
+      ring.style.width = rect.width + 'px'; ring.style.zIndex = 1000;
+      moveDragged(ev);
+      const up = (e)=>{ e.preventDefault(); finish(); window.removeEventListener('pointermove', move, {passive:false}); window.removeEventListener('touchmove', move, {passive:false}); };
+      const move = (e)=>{ if(!dragging) return; e.preventDefault(); moveDragged(e); };
+      window.addEventListener('pointermove', move, {passive:false});
+      window.addEventListener('pointerup',   up,   {passive:false, once:true});
+      window.addEventListener('pointercancel', up, {passive:false, once:true});
+      window.addEventListener('touchmove', move, {passive:false});
+      window.addEventListener('touchend',  up,   {passive:false, once:true});
+      window.addEventListener('touchcancel', up, {passive:false, once:true});
+    };
+    const finish = () => {
+      if (!dragging) return;
+      if (placeholder && placeholder.parentNode){ stage.insertBefore(ring, placeholder); placeholder.remove(); }
+      ring.style.position=''; ring.style.left=''; ring.style.top=''; ring.style.width=''; ring.style.zIndex='';
+      ring.classList.remove('dragging'); dragging=false; draggedEl=null; placeholder=null;
+      rebuildStacksFromDOM();
+    };
+    if (window.PointerEvent) handle.addEventListener('pointerdown', start, {passive:false});
+    else handle.addEventListener('touchstart', (e)=>start(e), {passive:false});
   });
-  topLines.forEach((line, i) => {
-    const div = document.createElement('div');
-    div.className = 'line-item';
-    if (animate) div.style.animationDelay = `${i * (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--line-stagger')) || 300)}ms`;
-    div.textContent = line;
-    poemLinesEl.appendChild(div);
+}
+function rebuildStacksFromDOM(){
+  const newStacks = [];
+  stage.querySelectorAll('.ring').forEach(row => {
+    const found = stacks.find(s => s.el === row);
+    if (found) newStacks.push(found);
+  });
+  stacks = newStacks;
+}
+
+/* ======== Current lines & rendering ======== */
+function currentLines(){ return stacks.map(s => s.options[s.currentIndex]); }
+
+function setSpecialBadge(active){
+  const header = document.querySelector('.poem-header');
+  let badge = document.getElementById('specialBadge');
+  if (active){
+    if (!badge){
+      badge = document.createElement('span');
+      badge.id = 'specialBadge';
+      badge.className = 'special-badge';
+      badge.innerHTML = '<span class="star">✨</span> Special Poem';
+      header.appendChild(badge);
+    }
+  } else if (badge) badge.remove();
+}
+function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderPoem(animated=false){
+  const lines = currentLines();
+  const quote = document.getElementById('poemFormatted');
+  if (!animated){
+    quote.innerHTML = '<em>"' + lines.map(escapeHTML).join('<br>') + '"</em>';
+  } else {
+    const stagger = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--line-stagger')) || 300;
+    let html = '<em>"';
+    for (let i=0;i<lines.length;i++){
+      html += `<span class="line" style="animation-delay:${i*stagger}ms">${escapeHTML(lines[i])}</span>`;
+      if (i < lines.length-1) html += '<br>';
+    }
+    html += '"</em>';
+    quote.innerHTML = html;
+  }
+  setSpecialBadge(isSpecialPoem());
+}
+
+/* ======== Spin logic (stair) ======== */
+function parseTimeToMs(val){ if (!val) return 0; if (val.endsWith('ms')) return parseFloat(val); if (val.endsWith('s')) return parseFloat(val)*1000; return parseFloat(val)||0; }
+function startSpin(card){ card.classList.remove('spinning'); void card.offsetWidth; card.classList.add('spinning'); }
+function stopSpin(card){ card.classList.remove('spinning'); }
+
+function unlockAudioOnce(){
+  const active = getActive();
+  if (active._unlocked) return;
+  try {
+    active.volume = Number(volRange.value || 0.6);
+    const p = active.play();
+    if (p && p.then){
+      p.then(() => { active.pause(); active.currentTime = 0; active._unlocked = true; })
+       .catch(() => { active._unlocked = true; });
+    } else { active._unlocked = true; }
+  } catch { active._unlocked = true; }
+}
+
+function spinStair(){
+  unlockAudioOnce();
+
+  const spinDur = parseTimeToMs(getComputedStyle(document.documentElement).getPropertyValue('--spin-duration').trim());
+  const offset = spinDur * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--stair-fraction') || 0.25);
+  const nextIndices = stacks.map(s => Math.floor(Math.random() * s.options.length));
+  const lastMidSwapTime = (stacks.length - 1) * offset + spinDur * 0.5;
+
+  stacks.forEach((s, idx) => {
+    const startDelay = idx * offset;
+    setTimeout(() => startSpin(s.card), startDelay);
+    setTimeout(() => { s.currentIndex = nextIndices[idx]; s.span.textContent = s.options[nextIndices[idx]]; }, startDelay + spinDur * 0.5);
+    setTimeout(() => stopSpin(s.card), startDelay + spinDur + 20);
+  });
+
+  setTimeout(async () => {
+    renderPoem(true);
+    if (isSpecialPoem()){
+      await playIndexForSpecial();
+    } else {
+      const idx = nextFromBag();
+      if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
+    }
+  }, lastMidSwapTime + 60);
+}
+
+/* ======== Music player with crossfade ======== */
+function prettyName(filename){ return String(filename).replace(/\.[^/.]+$/,"").replace(/_/g," ").replace(/-/g," ").trim(); }
+function formatTime(t){ if (!isFinite(t)) return "0:00"; const m = Math.floor(t/60), s = Math.floor(t%60); return m + ":" + String(s).padStart(2,"0"); }
+function resetSeekUI(){ seekRange.value = 0; seekRange.max = 0; curTimeEl.textContent = "0:00"; durTimeEl.textContent = "0:00"; }
+
+let ACTIVE = 'A'; // which audio element is active: 'A' or 'B'
+function getActive(){ return ACTIVE === 'A' ? playerA : playerB; }
+function getIdle(){ return ACTIVE === 'A' ? playerB : playerA; }
+function swapPlayers(){ ACTIVE = (ACTIVE === 'A' ? 'B' : 'A'); }
+
+/* Keep UI updated for whichever player is active */
+function updateDurAndSeekOn(active){
+  seekRange.max = isFinite(active.duration) ? active.duration : 0;
+  durTimeEl.textContent = formatTime(active.duration);
+}
+function updatePlayStateUI(){
+  const active = getActive();
+  playPauseBtn.textContent = active.paused ? "▶️" : "⏸️";
+}
+function setTitle(tr, extra = ""){
+  songTitleEl.textContent = "♪ " + prettyName(tr.name) + (extra ? " " + extra : "");
+}
+function isFatalAudioError(audio){
+  const c = audio && audio.error && audio.error.code;
+  return c === 3 || c === 4;
+}
+
+/* Volume handling */
+function setMasterVolume(v){
+  v = Math.max(0, Math.min(1, v));
+  getActive().volume = v;
+}
+volRange.addEventListener('input', () => setMasterVolume(Number(volRange.value)));
+
+/* Crossfade helper: linear fade between active and idle over --xfade-ms */
+function getXfadeMs(){
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--xfade-ms').trim();
+  if (!v) return 1800;
+  if (v.endsWith('ms')) return parseFloat(v)||1800;
+  if (v.endsWith('s')) return (parseFloat(v)||1.8)*1000;
+  return parseFloat(v)||1800;
+}
+
+async function crossfadeTo(url, titleObj){
+  const active = getActive();
+  const idle = getIdle();
+  const targetVol = Number(volRange.value || 0.6);
+
+  // Prepare idle
+  idle.onended = null;
+  idle.loop = false;
+  idle.src = url;
+  idle.load();
+  idle.volume = 0;
+
+  try { await idle.play(); } catch(e) {}
+
+  // Fade
+  const dur = getXfadeMs();
+  const steps = Math.max(10, Math.floor(dur / 30));
+  let step = 0;
+
+  return new Promise((resolve) => {
+    const tick = () => {
+      step++;
+      const t = step / steps;
+      active.volume = targetVol * (1 - t);
+      idle.volume   = targetVol * (t);
+      if (step >= steps){
+        active.pause();
+        active.currentTime = 0;
+        idle.volume = targetVol;
+        swapPlayers();
+        resetSeekUI();
+        if (isFinite(getActive().duration)) updateDurAndSeekOn(getActive());
+        setTitle(titleObj);
+        hookEnded(); // reattach onended to the new active
+        updatePlayStateUI();
+        resolve();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   });
 }
 
-/* ======== Boot ======== */
-document.addEventListener('DOMContentLoaded', () => {
-  renderRings();
-  renderPoem(false);
+/* Simple load (no crossfade) onto active */
+async function loadPlayOnActive(url, titleObj, {loop=false}={}){
+  const active = getActive();
+  active.onended = null;
+  active.loop = loop;
+  active.src = url;
+  active.load();
+  try { await active.play(); } catch(e){}
+  setTitle(titleObj);
+  resetSeekUI();
+  updateDurAndSeekOn(active);
+  updatePlayStateUI();
+  hookEnded();
+}
 
-  // Load library then first track
-  const tryLoad = () => {
-    const list = (window.LIBRARY && window.LIBRARY.tracks) || [];
-    if (!list.length) { setTimeout(tryLoad, 150); return; }
-    loadTrack(0);
-    updatePlayStateUI();
+/* Auto-advance on end (with crossfade) honoring Play All / Repeat */
+function hookEnded(){
+  const active = getActive();
+  active.onended = async () => {
+    if (optRepeat.checked){
+      active.currentTime = 0;
+      try { await active.play(); } catch(e) {}
+      return;
+    }
+    if (optPlayAll.checked){
+      const nxt = nextFromBag();
+      if (typeof nxt !== 'number') return;
+      const tr = LIBRARY[nxt];
+      await crossfadeTo(tr.url, tr);
+      currentIndex = nxt;
+    }
+    // If neither option checked: stop after current track
   };
-  tryLoad();
+}
+
+/* Public controls, using the library "bag" */
+async function playIndex(i, {loop=false, advanceBagOnSuccess=false, crossfade=false} = {}){
+  if (i < 0 || i >= LIBRARY.length) return;
+  const tr = LIBRARY[i];
+  try{
+    if (crossfade && !getActive().paused){
+      await crossfadeTo(tr.url, tr);
+    } else {
+      await loadPlayOnActive(tr.url, tr, {loop});
+    }
+    currentIndex = i;
+    if (advanceBagOnSuccess){
+      const pos = bag.indexOf(i);
+      if (pos !== -1) bagPos = pos;
+    }
+  } catch(e){
+    if (isFatalAudioError(getActive())){
+      BAD_TRACKS.add(tr.name);
+      rebuildBag();
+      const nxt = nextFromBag();
+      if (typeof nxt === 'number'){ await playIndex(nxt, {loop:false, advanceBagOnSuccess:true, crossfade:false}); return; }
+    }
+    setTitle({name:"Audio error."});
+  }
+}
+
+async function playIndexForSpecial(){
+  try{
+    // Stop both, then load special onto active and loop
+    playerA.pause(); playerB.pause();
+    playerA.currentTime = 0; playerB.currentTime = 0;
+    if (ACTIVE !== 'A') swapPlayers(); // deterministic
+
+    await loadPlayOnActive(SPECIAL_TRACK.url, {name: SPECIAL_TRACK.name + " — special"}, {loop:true});
+  } catch(e){
+    setTitle({name:"Audio error (special)."});
+  }
+}
+
+/* Player events (active only) */
+let seeking = false;
+function activeLoadedMeta(){
+  const active = getActive();
+  seekRange.max = isFinite(active.duration) ? active.duration : 0;
+  durTimeEl.textContent = formatTime(active.duration);
+}
+function activeTimeUpdate(){
+  if (seeking) return;
+  const active = getActive();
+  seekRange.value = active.currentTime || 0;
+  curTimeEl.textContent = formatTime(active.currentTime);
+}
+playerA.addEventListener('loadedmetadata', activeLoadedMeta);
+playerB.addEventListener('loadedmetadata', activeLoadedMeta);
+playerA.addEventListener('timeupdate', activeTimeUpdate);
+playerB.addEventListener('timeupdate', activeTimeUpdate);
+
+seekRange.addEventListener('input', () => { seeking = true; curTimeEl.textContent = formatTime(Number(seekRange.value)); });
+seekRange.addEventListener('change', () => {
+  const active = getActive();
+  active.currentTime = Number(seekRange.value);
+  seeking = false;
+});
+playPauseBtn.addEventListener('click', async () => {
+  const active = getActive();
+  if (active.paused){ try{ await active.play(); }catch{} }
+  else { active.pause(); }
+  updatePlayStateUI();
+});
+stopBtn.addEventListener('click', () => {
+  const active = getActive(), idle = getIdle();
+  // quick fadeout (300ms)
+  const startVol = active.volume, dur = 300, steps = Math.max(6, Math.floor(dur/30));
+  let step=0;
+  const tick = () => {
+    step++;
+    const t = step/steps;
+    active.volume = startVol*(1-t);
+    if (step>=steps){
+      active.pause(); active.currentTime=0; idle.pause(); idle.currentTime=0;
+      active.volume = Number(volRange.value || 0.6);
+      updatePlayStateUI(); resetSeekUI();
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
+prevBtn.addEventListener('click', async () => {
+  const idx = prevFromBag();
+  if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
+});
+nextBtn.addEventListener('click', async () => {
+  const idx = nextFromBag();
+  if (typeof idx === 'number') await playIndex(idx, {loop:false, advanceBagOnSuccess:true, crossfade:true});
 });
 
-/* ======== Special test: Shift+S */
+/* ======== Copy ======== */
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  const poem = '"' + currentLines().join('\n') + '"';
+  const text = '*' + poem + '* ~ by Aramish';
+  try{
+    await navigator.clipboard.writeText(text);
+    const b = document.getElementById('copyBtn'); const old = b.textContent; b.textContent = '✅ Copied';
+    setTimeout(()=> b.textContent = old, 1200);
+  }catch{ alert('Copy failed. You can select and copy from the poem box.'); }
+});
+
+/* ======== AUTOPLAY (on open): try; if blocked, show consent ======== */
+async function tryStartRandomSong() {
+  await waitForLibraryReady();
+  LIBRARY = window.LIBRARY || [];
+  if (!LIBRARY.length) return false;
+  rebuildBag();
+  try {
+    const idx = nextFromBag();
+    if (typeof idx === 'number') {
+      await playIndex(idx, { loop:false, advanceBagOnSuccess:true, crossfade:false });
+      return true;
+    }
+    return false;
+  } catch(e){ return false; }
+}
+function showAudioConsentOverlay() {
+  const overlay = document.getElementById('audio-consent');
+  const btn = document.getElementById('audio-consent-btn');
+  const msg = document.getElementById('consent-msg');
+  if (!overlay || !btn) return;
+  overlay.style.display = 'flex';
+  const enable = async () => {
+    const ok = await tryStartRandomSong();
+    if (ok) {
+      overlay.style.display = 'none';
+      return;
+    }
+    if (msg) msg.textContent = "Tap ▶️ once, then tap Enable Sound again.";
+  };
+  btn.onclick = enable;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) enable(); });
+}
+
+/* ======== Buttons & Init ======== */
+document.getElementById('spinBtn').addEventListener('click', spinStair);
+
+function initVolume(){
+  const savedVol = Number(localStorage.getItem('poem_vol'));
+  const v = Number.isNaN(savedVol) ? Number(volRange.value) : Math.max(0, Math.min(1, savedVol));
+  playerA.volume = v; playerB.volume = 0; // active starts A
+  volRange.value = String(v);
+  volRange.addEventListener('input', () => {
+    const val = Number(volRange.value);
+    getActive().volume = val;
+    localStorage.setItem('poem_vol', String(val));
+  });
+}
+
+/* Persisted toggles */
+function loadPersisted(){
+  loadOptions();
+}
+
+/* Build & start (v44 look preserved) */
+buildRings();
+renderPoem(true);
+initVolume();
+loadPersisted();
+
+/* Wait for the music library and attempt autoplay */
+waitForLibraryReady().then(() => {
+  LIBRARY = window.LIBRARY || [];
+  rebuildBag();
+  seekRange.value = 0;
+  // Try autoplay; if blocked, show consent overlay
+  tryStartRandomSong().then((ok) => { if (!ok) showAudioConsentOverlay(); });
+});
+
+/* Hidden special test: Shift+S */
 document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
 document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
 function generateSpecialPoem(){
