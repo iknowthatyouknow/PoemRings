@@ -67,7 +67,7 @@
     }
 
     .wrap{ width: min(96vw, var(--ring-width)); display:grid; gap: 14px; }
-    .stage{ display: grid; gap: 14px; perspective: 1000px; }
+    .stage{ position: relative;  display: grid; gap: 14px; perspective: 1000px; }
 
     .ring{ position: relative; width: 100%; height: var(--ring-height);
            display: grid; grid-template-columns: 44px 1fr; align-items: stretch; }
@@ -197,7 +197,7 @@
 
     /* Options column (right side, stacked) */
     .options-col{
-      display:flex; flex-direction: row; gap:8px; min-width: 140px;
+      display:flex; flex-direction:column; gap:8px; min-width: 140px;
     }
     .opt{
       display:flex; align-items:center; gap:10px;
@@ -257,16 +257,14 @@
       .music-row{ flex-direction: column; align-items: stretch; gap: 10px; }
       .ticker{ min-width: 0; width: 100%; }
       .player-controls{ justify-content:center; }
-      .options-col{ flex-direction: row; justify-content:center; gap:12px; }
+      .options-col{ flex-direction:row; justify-content:center; gap:12px; }
       .opt{ width:auto; }
       .player-row{ flex-direction: column; align-items: stretch; gap: 8px; }
       .seek{ min-width: 0; }
       .time{ text-align: left; }
       .vol-wrap input[type="range"]{ width: 120px; }
     }
-  
-.pbtn svg{ width:28px; height:28px; }
-</style>
+  </style>
 </head>
 <body>
   <!-- Autoplay consent (shown only if autoplay is blocked) -->
