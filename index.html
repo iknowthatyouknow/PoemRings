@@ -419,16 +419,19 @@ function buildRings(){
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = true;
+    el.draggable = false;                 // ← ring itself is NOT draggable
     el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
     drag.className = 'drag-handle';
     drag.title = "Drag to reorder";
     drag.textContent = "⋮⋮";
+    drag.setAttribute('draggable','true'); // ← handle IS draggable
 
-    const card = document.createElement('div'); card.className = 'card';
-    const span = document.createElement('span'); span.textContent = RINGS_DATA[i][0];
+    const card = document.createElement('div'); 
+    card.className = 'card';
+    const span = document.createElement('span'); 
+    span.textContent = RINGS_DATA[i][0];
     card.appendChild(span);
 
     el.appendChild(drag);
@@ -443,27 +446,66 @@ function buildRings(){
 
 /* Desktop Drag & Drop */
 function wireDesktopDnD(){
-  let dragSrc = null;
+  let dragSrcRing = null;
+
+  // Attach to the HANDLE, not the ring
+  stage.querySelectorAll('.ring .drag-handle').forEach(handle => {
+    const ring = handle.closest('.ring');
+
+    handle.addEventListener('dragstart', (e) => {
+      dragSrcRing = ring;
+      // Safari requires setData or DnD won't start
+      try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {}
+      e.dataTransfer.effectAllowed = 'move';
+      ring.classList.add('drag-over');
+    });
+
+    handle.addEventListener('dragend', () => {
+      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+      dragSrcRing = null;
+    });
+  });
+
+  // The drop targets are the rings themselves
   stage.querySelectorAll('.ring').forEach(ring => {
-    ring.addEventListener('dragstart', (e) => { dragSrc = ring; e.dataTransfer.effectAllowed='move'; ring.classList.add('drag-over'); });
-    ring.addEventListener('dragend',   () => { stage.querySelectorAll('.ring').forEach(el=>el.classList.remove('drag-over','drop-before','drop-after')); dragSrc=null; });
     ring.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      const rect = ring.getBoundingClientRect(), midY = rect.top + rect.height/2;
+      if (!dragSrcRing) return;
+      e.preventDefault();                 // required to allow drop
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
       ring.classList.add('drag-over');
       ring.classList.toggle('drop-before', e.clientY < midY);
       ring.classList.toggle('drop-after',  e.clientY >= midY);
       e.dataTransfer.dropEffect = 'move';
     });
-    ring.addEventListener('dragleave', () => ring.classList.remove('drop-before','drop-after'));
+
+    ring.addEventListener('dragleave', () => {
+      ring.classList.remove('drop-before','drop-after');
+    });
+
     ring.addEventListener('drop', (e) => {
       e.preventDefault();
-      if (!dragSrc || dragSrc === ring) return;
-      const rect = ring.getBoundingClientRect(), midY = rect.top + rect.height/2;
+      if (!dragSrcRing || dragSrcRing === ring) return;
+
+      const rect = ring.getBoundingClientRect();
+      const midY = rect.top + rect.height/2;
       const dropBefore = e.clientY < midY;
-      if (dropBefore) stage.insertBefore(dragSrc, ring); else stage.insertBefore(dragSrc, ring.nextSibling);
-      rebuildStacksFromDOM();
+
+      // Reorder DOM
+      if (dropBefore) stage.insertBefore(dragSrcRing, ring);
+      else            stage.insertBefore(dragSrcRing, ring.nextSibling);
+
+      // Rebuild stacks array according to new DOM order
+      const newStacks = [];
+      stage.querySelectorAll('.ring').forEach(row => {
+        const found = stacks.find(s => s.el === row);
+        if (found) newStacks.push(found);
+      });
+      stacks = newStacks;
+
+      // Clean up classes
       stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+      dragSrcRing = null;
     });
   });
 }
