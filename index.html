@@ -1158,12 +1158,12 @@ aboutClose.addEventListener('click', closeAbout);
 aboutOverlay.addEventListener('click', (e) => { if (e.target === aboutOverlay) closeAbout(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAbout(); });
 
-/* ======== Secret trigger on the word "Arash" in About ======== */
+/* ======== Secret trigger on the word "Arash" in About (now closes overlay too) ======== */
 const secretArash = document.getElementById('secretArash');
 if (secretArash){
-  // Minimal hint; no visual drift beyond pointer cursor/title attribute already in markup
   secretArash.addEventListener('click', () => {
     generateSpecialPoem();   // locks special poem + plays special track
+    closeAbout();            // <-- close About overlay so poem is visible
   });
 }
 </script>
