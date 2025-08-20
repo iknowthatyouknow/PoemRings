@@ -1,140 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Environment</title>
-  <style>
-    :root{
-      --leaf-1: #7fb3ff;
-      --leaf-2: #a7c7ff;
-      --leaf-3: #7aa6ff;
-      --leaf-4: #9ec0ff;
-      --leaf-5: #6ea0ff;
-    }
-    html, body { height: 100%; }
-    body{
-      margin:0;
-      background: transparent;   /* important: see through to index.html’s gradient */
-      overflow: hidden;          /* keep leaves inside viewport */
-    }
-    canvas{
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      display: block;
-      pointer-events: none;      /* never intercept clicks/taps */
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Environment</title>
+<style>
+  html, body { height: 100%; margin: 0; background: transparent; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+</style>
 </head>
 <body>
-  <canvas id="env"></canvas>
-  <script>
-  (function(){
-    const cvs = document.getElementById('env');
-    const ctx = cvs.getContext('2d');
-    const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    let W=0, H=0;
+<canvas id="env"></canvas>
+<script>
+(function(){
+  const canvas = document.getElementById('env');
+  const ctx = canvas.getContext('2d');
 
-    function resize(){
-      W = window.innerWidth; H = window.innerHeight;
-      cvs.width  = Math.floor(W * DPR);
-      cvs.height = Math.floor(H * DPR);
-      cvs.style.width  = W + 'px';
-      cvs.style.height = H + 'px';
-      ctx.setTransform(DPR,0,0,DPR,0,0);
-    }
-    addEventListener('resize', resize, {passive:true});
-    resize();
+  function resize(){
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  new ResizeObserver(resize).observe(canvas);
+  resize();
 
-    const COLORS = ['var(--leaf-1)','var(--leaf-2)','var(--leaf-3)','var(--leaf-4)','var(--leaf-5)'];
-    const LEAF_COUNT = 60;
-    const SPEED_MIN = 12, SPEED_MAX = 28;
-    const SWAY = 40, ROT_SPEED = 0.5, LINE_WIDTH = 1.6;
+  // Gentle wind lines + floating leaves (very subtle)
+  const STREAMS = 16, LEAVES = 48;
+  const LINE = 'rgba(173,190,230,0.08)';
+  const LEAF_STROKE = 'rgba(200,220,255,0.28)';
+  const LEAF_FILL = 'rgba(200,220,255,0.08)';
+  const R = (a,b)=>a+Math.random()*(b-a);
+  const wrap01 = v => v < -0.2 ? v+1.4 : (v > 1.2 ? v-1.4 : v);
 
-    function rand(a,b){ return a + Math.random()*(b-a); }
-    function pick(a){ return a[(Math.random()*a.length)|0]; }
+  const lines = Array.from({length: STREAMS}, () => ({
+    x:R(-0.1,1.1), y:R(0,1), len:R(0.25,0.55), amp:R(10,26), phase:R(0,Math.PI*2), th:R(0.7,1.2)
+  }));
+  const leaves = Array.from({length: LEAVES}, () => ({
+    x:R(-0.15,1.15), y:R(-0.05,1.05), s:R(6,12), rot:R(0,Math.PI*2),
+    spin:R(-0.002,0.002), driftY:R(-0.03,0.03), phase:R(0,Math.PI*2)
+  }));
 
-    function makeLeaf(){
-      const s = rand(0.7, 1.4);
-      return {
-        x0: rand(-SWAY, W+SWAY),
-        y: rand(-H, -40),
-        t: rand(0, Math.PI*2),
-        sway: rand(SWAY*0.6, SWAY*1.2),
-        speed: rand(SPEED_MIN, SPEED_MAX),
-        rot: rand(0, Math.PI*2),
-        rotSpeed: rand(-ROT_SPEED, ROT_SPEED),
-        len: rand(28, 54)*s,
-        col: pick(COLORS),
-      };
-    }
-    let leaves = new Array(LEAF_COUNT).fill(0).map(makeLeaf);
+  let last = performance.now();
+  function tick(now){
+    const dt = Math.min(60, now - last); last = now;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const W = canvas.clientWidth, H = canvas.clientHeight;
 
-    function drawLeaf(l){
-      ctx.save();
-      ctx.translate(l.x0 + Math.sin(l.t) * l.sway, l.y);
-      ctx.rotate(l.rot);
-
-      ctx.lineWidth = LINE_WIDTH;
-      ctx.strokeStyle = l.col;
-      ctx.globalAlpha = 0.9;
-
-      const len = l.len;
-      // midrib
+    // wind lines
+    ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
+    for (const ln of lines){
+      ln.x = wrap01(ln.x + dt * 0.00005);
+      const x0 = ln.x * W, y0 = ln.y * H, pxLen = ln.len * W;
+      ctx.lineWidth = ln.th;
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(0, len * 0.9);
-      ctx.stroke();
-
-      // two outline curves
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(-len*0.35, len*0.25, -len*0.25, len*0.65, 0, len*0.9);
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo( len*0.35, len*0.25,  len*0.25, len*0.65, 0, len*0.9);
-      ctx.stroke();
-
-      // small veins
-      ctx.globalAlpha = 0.6;
-      for (let i=0;i<3;i++){
-        const p = (i+1)/4;
-        ctx.beginPath();
-        ctx.moveTo(0, len*p);
-        ctx.lineTo(-len*0.18, len*(p-0.06));
-        ctx.moveTo(0, len*p);
-        ctx.lineTo( len*0.18, len*(p-0.06));
-        ctx.stroke();
+      const segs = 10;
+      for (let i=0;i<=segs;i++){
+        const u=i/segs, x=x0+u*pxLen;
+        const y=y0 + Math.sin(ln.phase + now*0.002 + u*4)*ln.amp
+                    + Math.cos(ln.phase*1.37 + u*2)*(ln.amp*0.25);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
       }
+      ctx.stroke();
+    }
+
+    // leaves
+    ctx.lineWidth = 1; ctx.strokeStyle = LEAF_STROKE; ctx.fillStyle = LEAF_FILL;
+    for (const leaf of leaves){
+      leaf.x = wrap01(leaf.x + dt*0.00008 + Math.sin(now*0.0003 + leaf.phase)*0.00003);
+      leaf.y = wrap01(leaf.y + leaf.driftY*dt*0.00005 + Math.cos(now*0.00025 + leaf.phase)*0.00005);
+      leaf.rot += leaf.spin * dt;
+
+      const cx = leaf.x * W, cy = leaf.y * H, s = leaf.s;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(leaf.rot);
+      ctx.beginPath();
+      ctx.moveTo(0, -s*0.6);
+      ctx.quadraticCurveTo(s*0.55, -s*0.15, 0, s*0.7);
+      ctx.quadraticCurveTo(-s*0.55, -s*0.15, 0, -s*0.6);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,-s*0.45); ctx.quadraticCurveTo(0,s*0.1,0,s*0.55); ctx.stroke();
       ctx.restore();
     }
 
-    let last = performance.now();
-    function tick(now){
-      const dt = Math.min(0.05, (now - last)/1000);
-      last = now;
-
-      ctx.clearRect(0,0,W,H);
-      for (let i=0;i<leaves.length;i++){
-        const l = leaves[i];
-        l.t += dt;
-        l.y += l.speed * dt;
-        l.rot += l.rotSpeed * dt;
-
-        drawLeaf(l);
-
-        if (l.y > H + 60){
-          leaves[i] = makeLeaf();
-          leaves[i].y = rand(-H*0.4, -40);
-        }
-      }
-      requestAnimationFrame(tick);
-    }
     requestAnimationFrame(tick);
-
-    document.addEventListener('visibilitychange', () => { last = performance.now(); });
-  })();
-  </script>
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
 </body>
 </html>
