@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aramish</title>
+  <title>If Only</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -264,38 +264,36 @@
       .time{ text-align: left; }
       .vol-wrap input[type="range"]{ width: 120px; }
     }
-  
 
-/* === Strict ruleset-safe patches (do not alter visuals beyond requested) === */
-.options-box{
-  display:flex;
-  justify-content:flex-start;
-  align-items:center;
-  margin-top:8px;
-}
-.options-box .options-col{
-  display:flex !important;
-  flex-direction: row !important;  /* horizontal: Play All then Repeat */
-  align-items:center;
-  gap:12px;                         /* spacing */
-}
-.options-box .options-col .opt{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  white-space:nowrap;
-}
+    /* === Strict ruleset-safe patches === */
+    .options-box{
+      display:flex;
+      justify-content:flex-start;
+      align-items:center;
+      margin-top:8px;
+    }
+    .options-box .options-col{
+      display:flex !important;
+      flex-direction: row !important;  /* horizontal: Play All then Repeat */
+      align-items:center;
+      gap:12px;                         /* spacing */
+    }
+    .options-box .options-col .opt{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+    }
 
-/* Ensure the player icons are visibly sized inside the circular buttons */
-.pbtn svg{ width:28px; height:28px; }
+    /* Ensure the player icons are visibly sized inside the circular buttons */
+    .pbtn svg{ width:28px; height:28px; }
 
-/* Ensure touch/absolute drag computes against the correct container */
-.stage{ position: relative; }
+    /* Ensure touch/absolute drag computes against the correct container */
+    .stage{ position: relative; }
 
-
-/* Prevent touch scroll from hijacking drag on mobile */
-.drag-handle{ touch-action: none; -ms-touch-action: none; }
-</style>
+    /* Prevent touch scroll from hijacking drag on mobile */
+    .drag-handle{ touch-action: none; -ms-touch-action: none; }
+  </style>
 </head>
 <body>
   <!-- Autoplay consent (shown only if autoplay is blocked) -->
@@ -341,21 +339,20 @@
             Vol <input id="volRange" type="range" min="0" max="1" step="0.01" value="0.6" />
           </span>
         </div>
-
-        <!-- Options column (right) -->
-        
       </div>
 
       <div class="player-row">
         <div class="seek">
           <input id="seekRange" type="range" min="0" max="0" step="0.01" value="0" />
         </div>
-<div class="options-box">
-<div class="options-col" aria-label="Playback options">
-          <label class="opt"><input id="optPlayAll" type="checkbox" / checked> Play All</label>
-          <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
+
+        <div class="options-box">
+          <div class="options-col" aria-label="Playback options">
+            <!-- FIX: make Play All truly pre-checked -->
+            <label class="opt"><input id="optPlayAll" type="checkbox" checked /> Play All</label>
+            <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
+          </div>
         </div>
-</div>
 
         <div class="time"><span id="curTime">0:00</span> / <span id="durTime">0:00</span></div>
       </div>
@@ -407,7 +404,7 @@ const optPlayAll = document.getElementById('optPlayAll');
 const optRepeat  = document.getElementById('optRepeat');
 
 function loadOptions(){
-  optPlayAll.checked = localStorage.getItem('poem_playAll') === '1';
+  optPlayAll.checked = localStorage.getItem('poem_playAll') === '1' || optPlayAll.checked;
   optRepeat.checked  = localStorage.getItem('poem_repeat')  === '1';
 }
 function saveOptions(){
@@ -454,14 +451,14 @@ function buildRings(){
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = true;                 // ← Entire Ring draggable (desktop)
+    el.draggable = true;                 // Entire ring is the drag source (desktop)
     el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
     drag.className = 'drag-handle';
     drag.title = "Drag to reorder";
     drag.textContent = "⋮⋮";
-    drag.setAttribute('draggable','true'); // ← handle IS draggable
+    /* IMPORTANT: do NOT set the handle as draggable */
 
     const card = document.createElement('div'); 
     card.className = 'card';
@@ -487,7 +484,7 @@ function wireDesktopDnD(){
   stage.querySelectorAll('.ring').forEach(ring => {
     ring.addEventListener('dragstart', (e) => {
       dragSrcRing = ring;
-      try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {}
+      try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {} // improves Safari reliability
       e.dataTransfer.effectAllowed = 'move';
       ring.classList.add('drag-over');
     });
@@ -538,7 +535,7 @@ function wireDesktopDnD(){
       });
       stacks = newStacks;
 
-      // Ruleset: update poem immediately after movement
+      // Update poem immediately after movement
       renderPoem(true);
     }
 
@@ -596,6 +593,7 @@ function wireTouchDnD(){
       ring.style.position=''; ring.style.left=''; ring.style.top=''; ring.style.width=''; ring.style.zIndex='';
       ring.classList.remove('dragging'); dragging=false; draggedEl=null; placeholder=null;
       rebuildStacksFromDOM();
+      renderPoem(true); // <-- ensure poem reflects new order on touch
     };
     if (window.PointerEvent) handle.addEventListener('pointerdown', start, {passive:false});
     else handle.addEventListener('touchstart', (e)=>start(e), {passive:false});
