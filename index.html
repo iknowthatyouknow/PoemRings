@@ -6,7 +6,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>If Only You</title>
+  <title>If Only</title>
   <style>
     :root{
       --spin-duration: 1200ms;
@@ -265,7 +265,7 @@
       .vol-wrap input[type="range"]{ width: 120px; }
     }
 
-    /* === Strict ruleset-safe patches === */
+    /* === Strict ruleset-safe patches (do not alter visuals beyond requested) === */
     .options-box{
       display:flex;
       justify-content:flex-start;
@@ -285,7 +285,7 @@
       white-space:nowrap;
     }
 
-    /* Ensure the player icons are visibly sized inside the circular buttons */
+    /* Ensure the player icons are visibly sized inside the circular buttons (for SVG use) */
     .pbtn svg{ width:28px; height:28px; }
 
     /* Ensure touch/absolute drag computes against the correct container */
@@ -348,7 +348,6 @@
 
         <div class="options-box">
           <div class="options-col" aria-label="Playback options">
-            <!-- FIX: make Play All truly pre-checked -->
             <label class="opt"><input id="optPlayAll" type="checkbox" checked /> Play All</label>
             <label class="opt"><input id="optRepeat"  type="checkbox" /> Repeat</label>
           </div>
@@ -444,6 +443,18 @@ const seekRange = document.getElementById('seekRange');
 const curTimeEl = document.getElementById('curTime');
 const durTimeEl = document.getElementById('durTime');
 
+/* ======== Special-poem lock (manual trigger only) ======== */
+const SPECIAL_LINES_RAW = [
+  "Strength in Silence,",
+  "Stillness that softens the Sharpest Edge,",
+  "Every Step Writes Peace in Stone",
+  "Her Voice Mends What fear has Broken,",
+  "The Horizon Waits for her Journey"
+];
+// When true, the poem box shows the special poem regardless of ring order
+let forceSpecialDisplay = false;
+function getDisplayLines(){ return forceSpecialDisplay ? SPECIAL_LINES_RAW : currentLines(); }
+
 /* ======== Build Reorderable Rings ======== */
 function buildRings(){
   stage.innerHTML = "";
@@ -451,14 +462,14 @@ function buildRings(){
   for (let i = 0; i < RINGS_DATA.length; i++){
     const el = document.createElement('div');
     el.className = 'ring';
-    el.draggable = true;                 // Entire ring is the drag source (desktop)
+    el.draggable = true;                 // Entire ring draggable (desktop)
     el.dataset.idx = String(i);
 
     const drag = document.createElement('div');
     drag.className = 'drag-handle';
     drag.title = "Drag to reorder";
     drag.textContent = "⋮⋮";
-    /* IMPORTANT: do NOT set the handle as draggable */
+    drag.setAttribute('draggable','true'); // Enable desktop drag from the handle
 
     const card = document.createElement('div'); 
     card.className = 'card';
@@ -476,36 +487,55 @@ function buildRings(){
   wireTouchDnD();
 }
 
-/* Desktop Drag & Drop */
+/* Desktop Drag & Drop (ring OR handle) */
 function wireDesktopDnD(){
   let dragSrcRing = null;
 
-  // Drag starts/ends on the ring (source = ring)
+  function beginDragFrom(ring, e){
+    dragSrcRing = ring;
+    try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {}
+    e.dataTransfer.effectAllowed = 'move';
+    ring.classList.add('drag-over');
+  }
+  function endDrag(){
+    stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
+    dragSrcRing = null;
+  }
+
+  // Start/end from the ring itself
   stage.querySelectorAll('.ring').forEach(ring => {
-    ring.addEventListener('dragstart', (e) => {
-      dragSrcRing = ring;
-      try { e.dataTransfer.setData('text/plain', 'ring'); } catch(_) {} // improves Safari reliability
-      e.dataTransfer.effectAllowed = 'move';
-      ring.classList.add('drag-over');
+    ring.addEventListener('dragstart', (e) => beginDragFrom(ring, e));
+    ring.addEventListener('dragend', endDrag);
+  });
+  // Start/end from the handle (map to its parent ring)
+  stage.querySelectorAll('.ring .drag-handle').forEach(handle => {
+    handle.addEventListener('dragstart', (e) => {
+      const ring = handle.closest('.ring'); if (!ring) return;
+      beginDragFrom(ring, e);
+      if (e.dataTransfer && e.dataTransfer.setDragImage){
+        const img = new Image();
+        img.src = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>');
+        e.dataTransfer.setDragImage(img, 0, 0);
+      }
     });
-    ring.addEventListener('dragend', () => {
-      stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
-      dragSrcRing = null;
-    });
+    handle.addEventListener('dragend', endDrag);
   });
 
-  // DELEGATION so children count as valid targets
+  // Always allow dropping somewhere in the stage (even in gaps)
+  stage.addEventListener('dragover', (e) => {
+    if (e.dataTransfer){ try { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } catch(_) {} }
+    else e.preventDefault();
+  }, {capture:true});
+
+  // Delegated hints for before/after when over a ring
   stage.addEventListener('dragover', (e) => {
     if (!dragSrcRing) return;
-    const ring = e.target.closest('.ring');
-    if (!ring) return;
-    e.preventDefault(); // REQUIRED so drop will fire on this target
+    const ring = e.target.closest('.ring'); if (!ring) return;
     const rect = ring.getBoundingClientRect();
     const midY = rect.top + rect.height/2;
     ring.classList.add('drag-over');
     ring.classList.toggle('drop-before', e.clientY < midY);
     ring.classList.toggle('drop-after',  e.clientY >= midY);
-    try { e.dataTransfer.dropEffect = 'move'; } catch(_) {}
   });
 
   stage.addEventListener('dragleave', (e) => {
@@ -513,37 +543,40 @@ function wireDesktopDnD(){
     if (ring) ring.classList.remove('drop-before','drop-after');
   });
 
+  // Drop with fallback to nearest ring by Y so drops in gaps still stick
   stage.addEventListener('drop', (e) => {
     if (!dragSrcRing) return;
-    const ring = e.target.closest('.ring');
-    if (!ring) return;
     e.preventDefault();
 
-    if (dragSrcRing !== ring){
-      const rect = ring.getBoundingClientRect();
-      const midY = rect.top + rect.height/2;
-      const dropBefore = e.clientY < midY;
+    let targetRing = e.target.closest('.ring');
+    if (!targetRing){
+      const rings = Array.from(stage.querySelectorAll('.ring'));
+      if (!rings.length) return;
+      const y = e.clientY;
+      let best=null, bestDist=Infinity;
+      for (const r of rings){
+        const rect = r.getBoundingClientRect();
+        const mid = rect.top + rect.height/2;
+        const d = Math.abs(mid - y);
+        if (d < bestDist){ best = r; bestDist = d; }
+      }
+      targetRing = best;
+    }
+    if (targetRing && dragSrcRing !== targetRing){
+      const rect = targetRing.getBoundingClientRect();
+      const dropBefore = e.clientY < rect.top + rect.height/2;
 
-      if (dropBefore) stage.insertBefore(dragSrcRing, ring);
-      else            stage.insertBefore(dragSrcRing, ring.nextSibling);
+      if (dropBefore) stage.insertBefore(dragSrcRing, targetRing);
+      else            stage.insertBefore(dragSrcRing, targetRing.nextSibling);
 
-      // Rebuild stacks to match DOM order
-      const newStacks = [];
-      stage.querySelectorAll('.ring').forEach(row => {
-        const found = stacks.find(s => s.el === row);
-        if (found) newStacks.push(found);
-      });
-      stacks = newStacks;
-
-      // Update poem immediately after movement
+      // Sync stacks to DOM order and refresh poem (respects special lock)
+      rebuildStacksFromDOM();
       renderPoem(true);
     }
-
     stage.querySelectorAll('.ring').forEach(el => el.classList.remove('drag-over','drop-before','drop-after'));
     dragSrcRing = null;
   });
 }
-
 
 /* Touch/Pointer Drag & Drop for mobile */
 function wireTouchDnD(){
@@ -593,7 +626,7 @@ function wireTouchDnD(){
       ring.style.position=''; ring.style.left=''; ring.style.top=''; ring.style.width=''; ring.style.zIndex='';
       ring.classList.remove('dragging'); dragging=false; draggedEl=null; placeholder=null;
       rebuildStacksFromDOM();
-      renderPoem(true); // <-- ensure poem reflects new order on touch
+      renderPoem(true); // respect special lock
     };
     if (window.PointerEvent) handle.addEventListener('pointerdown', start, {passive:false});
     else handle.addEventListener('touchstart', (e)=>start(e), {passive:false});
@@ -626,7 +659,7 @@ function setSpecialBadge(active){
 }
 function escapeHTML(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function renderPoem(animated=false){
-  const lines = currentLines();
+  const lines = getDisplayLines();        // ← respects special lock
   const quote = document.getElementById('poemFormatted');
   if (!animated){
     quote.innerHTML = '<em>"' + lines.map(escapeHTML).join('<br>') + '"</em>';
@@ -640,7 +673,8 @@ function renderPoem(animated=false){
     html += '"</em>';
     quote.innerHTML = html;
   }
-  setSpecialBadge(isSpecialPoem());
+  if (forceSpecialDisplay) setSpecialBadge(true);
+  else                    setSpecialBadge(isSpecialPoem());
 }
 
 /* ======== Spin logic (stair) ======== */
@@ -662,6 +696,8 @@ function unlockAudioOnce(){
 }
 
 function spinStair(){
+  // Unlock special display so spin shows a new poem from rings
+  forceSpecialDisplay = false;
   unlockAudioOnce();
 
   const spinDur = parseTimeToMs(getComputedStyle(document.documentElement).getPropertyValue('--spin-duration').trim());
@@ -908,7 +944,8 @@ nextBtn.addEventListener('click', async () => {
 
 /* ======== Copy ======== */
 document.getElementById('copyBtn').addEventListener('click', async () => {
-  const poem = '"' + currentLines().join('\n') + '"';
+  const lines = getDisplayLines();         // respects special-poem lock
+  const poem = '"' + lines.join('\n') + '"';
   const text = '*' + poem + '* ~ by Aramish';
   try{
     await navigator.clipboard.writeText(text);
@@ -989,13 +1026,10 @@ waitForLibraryReady().then(() => {
 document.getElementById('testSpecialBtn').addEventListener('click', generateSpecialPoem);
 document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 's' && e.shiftKey) generateSpecialPoem(); });
 function generateSpecialPoem(){
-  const picks = [0, 1, 2, 1, 2];
-  picks.forEach((idx, i) => {
-    stacks[i].currentIndex = idx;
-    stacks[i].span.textContent = stacks[i].options[idx];
-  });
-  renderPoem(true);
-  playIndexForSpecial();
+  // Manual trigger: lock the poem display to the special sequence (bypass ring order)
+  forceSpecialDisplay = true;
+  renderPoem(true);          // shows the special poem text immediately (with ✨ badge)
+  playIndexForSpecial();     // loops the special song as before
 }
 </script>
 </body>
