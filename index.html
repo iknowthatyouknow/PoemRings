@@ -294,6 +294,37 @@
     /* Prevent touch scroll from hijacking drag on mobile */
     .drag-handle{ touch-action: none; -ms-touch-action: none; }
 
+    /* --- Mobile overflow containment (ruleset-safe) --- */
+    /* Make sure flexible rows can actually shrink instead of forcing horizontal growth */
+    .wrap, .stage, .poem, .music, .music-row, .player-row, .ring, .card, .ticker {
+      max-width: 100%;
+    }
+    
+    /* In flex layouts, children default to min-width:auto (can overflow). Force shrinkability. */
+    .music-row > * { min-width: 0; }
+    .player-row > * { min-width: 0; }
+    
+    /* Key flex children that can balloon due to content/animation */
+    .ticker,
+    .player-controls,
+    .options-box,
+    .seek,
+    .time {
+      min-width: 0;
+    }
+    
+    /* Extra safety for text wrapping (has no visual change unless text would overflow) */
+    .card > span,
+    #poemFormatted {
+      overflow-wrap: anywhere;       /* allows break when needed */
+      word-break: break-word;        /* fallback for long tokens */
+    }
+    
+    /* Make sure the marquee animation can't expand the layout width */
+    .ticker { overflow: hidden; }    /* already present, reaffirm */
+    .ticker__inner { will-change: transform; }  /* perf hint only, no layout change */
+
+
     /* ======== Minimal menu & overlay (top-right) ======== */
     .menu-wrap{
       position: fixed;
