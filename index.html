@@ -363,6 +363,8 @@
     .about-close:hover{ background:#121a30; }
     .about-body{ line-height:1.6; font-size: 0.98rem; }
     .about-body em{ opacity:.9; }
+    /* Optional: pointer cursor for the secret trigger word, no visual restyle */
+    #secretArash{ cursor: pointer; }
   </style>
 </head>
 <body>
@@ -384,7 +386,7 @@
         <button id="aboutClose" class="about-close" aria-label="Close">Close</button>
       </div>
       <div class="about-body">
-        <p><strong>Aramish</strong> (Persian: <em>آرامش</em>, Ārāmeš; “ah-RAH-mesh”) — noun: calm, tranquility, inner peace; also the pen/artist name of Arash Mahboubi, used playfully as a synonym for his poetry, art, and music.</p>
+        <p><strong>Aramish</strong> (Persian: <em>آرامش</em>, Ārāmeš; “ah-RAH-mesh”) — noun: calm, tranquility, inner peace; also the pen/artist name of <span id="secretArash" title="✨ Special">Arash</span> Mahboubi, used playfully as a synonym for his poetry, art, and music.</p>
       </div>
     </div>
   </div>
@@ -1155,6 +1157,15 @@ aboutItem.addEventListener('click', openAbout);
 aboutClose.addEventListener('click', closeAbout);
 aboutOverlay.addEventListener('click', (e) => { if (e.target === aboutOverlay) closeAbout(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAbout(); });
+
+/* ======== Secret trigger on the word "Arash" in About ======== */
+const secretArash = document.getElementById('secretArash');
+if (secretArash){
+  // Minimal hint; no visual drift beyond pointer cursor/title attribute already in markup
+  secretArash.addEventListener('click', () => {
+    generateSpecialPoem();   // locks special poem + plays special track
+  });
+}
 </script>
 </body>
 </html>
