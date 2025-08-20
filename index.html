@@ -293,9 +293,102 @@
 
     /* Prevent touch scroll from hijacking drag on mobile */
     .drag-handle{ touch-action: none; -ms-touch-action: none; }
+
+    /* ======== Minimal menu & overlay (top-right) ======== */
+    .menu-wrap{
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10000; /* above everything */
+    }
+    .menu-btn{
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid #2a3348;
+      box-shadow: 0 6px 18px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,0.03);
+      display:flex; align-items:center; justify-content:center;
+      cursor: pointer; outline: none; color: var(--text);
+    }
+    .menu-btn:hover{ background: var(--btn-hover); border-color:#35415a; }
+    .menu-icon{
+      width: 18px; height: 12px; position: relative;
+    }
+    .menu-icon::before, .menu-icon::after, .menu-icon span{
+      content:""; position:absolute; left:0; right:0; height:2px; background:#cdd6e7; border-radius:2px;
+    }
+    .menu-icon::before{ top:0; }
+    .menu-icon span{ top:5px; }
+    .menu-icon::after{ bottom:0; }
+
+    .menu-dropdown{
+      position: absolute;
+      right: 0;
+      margin-top: 8px;
+      background: linear-gradient(180deg, #101522, #0f1522);
+      border: 1px solid #21283a;
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      border-radius: 10px;
+      padding: 6px;
+      min-width: 160px;
+      display: none;
+    }
+    .menu-dropdown.open{ display:block; }
+    .menu-item{
+      display:block; width:100%; text-align:left;
+      padding: 8px 10px; border-radius: 8px; color: var(--text);
+      background: transparent; border: 0; cursor: pointer; font-weight: 600;
+    }
+    .menu-item:hover{ background:#182033; }
+
+    /* About overlay panel */
+    #aboutOverlay{
+      display:none; position:fixed; inset:0;
+      background: rgba(0,0,0,.6); backdrop-filter: blur(2px);
+      z-index: 10001; color:#e8ecf4; align-items:center; justify-content:center; padding: 20px;
+    }
+    #aboutOverlay .about-card{
+      background: #121826; border:1px solid #26313d; border-radius:14px;
+      max-width: 680px; width: min(92vw, 680px);
+      box-shadow: 0 12px 32px rgba(0,0,0,.4);
+      padding: 16px 18px;
+    }
+    .about-head{
+      display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 8px;
+    }
+    .about-title{ margin:0; font-size: 1rem; color: var(--muted); font-weight: 800; letter-spacing:.3px; }
+    .about-close{
+      background: #0b1120; border:1px solid #242c3e; color:#cdd6e7;
+      border-radius: 10px; padding:6px 10px; cursor:pointer; font-weight:700;
+    }
+    .about-close:hover{ background:#121a30; }
+    .about-body{ line-height:1.6; font-size: 0.98rem; }
+    .about-body em{ opacity:.9; }
   </style>
 </head>
 <body>
+  <!-- Top-right minimal menu -->
+  <div class="menu-wrap" aria-label="Site menu">
+    <button id="menuBtn" class="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menuDropdown" title="Menu">
+      <span class="menu-icon"><span></span></span>
+    </button>
+    <div id="menuDropdown" class="menu-dropdown" role="menu">
+      <button id="aboutItem" class="menu-item" role="menuitem">About</button>
+    </div>
+  </div>
+
+  <!-- About overlay -->
+  <div id="aboutOverlay" aria-hidden="true">
+    <div class="about-card" role="dialog" aria-labelledby="aboutTitle" aria-modal="true">
+      <div class="about-head">
+        <h3 id="aboutTitle" class="about-title">About</h3>
+        <button id="aboutClose" class="about-close" aria-label="Close">Close</button>
+      </div>
+      <div class="about-body">
+        <p><strong>Aramish</strong> (Persian: <em>آرامش</em>, Ārāmeš; “ah-RAH-mesh”) — noun: calm, tranquility, inner peace; also the pen/artist name of Arash Mahboubi, used playfully as a synonym for his poetry, art, and music.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Autoplay consent (shown only if autoplay is blocked) -->
   <div id="audio-consent" aria-hidden="true">
     <div class="card">
@@ -1031,6 +1124,37 @@ function generateSpecialPoem(){
   renderPoem(true);          // shows the special poem text immediately (with ✨ badge)
   playIndexForSpecial();     // loops the special song as before
 }
+
+/* ======== Menu & About overlay wiring ======== */
+const menuBtn = document.getElementById('menuBtn');
+const menuDropdown = document.getElementById('menuDropdown');
+const aboutItem = document.getElementById('aboutItem');
+const aboutOverlay = document.getElementById('aboutOverlay');
+const aboutClose = document.getElementById('aboutClose');
+
+function closeMenu(){ menuDropdown.classList.remove('open'); menuBtn.setAttribute('aria-expanded','false'); }
+menuBtn.addEventListener('click', () => {
+  const open = !menuDropdown.classList.contains('open');
+  if (open){ menuDropdown.classList.add('open'); menuBtn.setAttribute('aria-expanded','true'); }
+  else { closeMenu(); }
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-wrap')) closeMenu();
+});
+
+function openAbout(){
+  aboutOverlay.style.display = 'flex';
+  aboutOverlay.setAttribute('aria-hidden','false');
+  closeMenu();
+}
+function closeAbout(){
+  aboutOverlay.style.display = 'none';
+  aboutOverlay.setAttribute('aria-hidden','true');
+}
+aboutItem.addEventListener('click', openAbout);
+aboutClose.addEventListener('click', closeAbout);
+aboutOverlay.addEventListener('click', (e) => { if (e.target === aboutOverlay) closeAbout(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAbout(); });
 </script>
 </body>
 </html>
