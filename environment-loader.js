@@ -3,6 +3,7 @@
   function injectEnvironment() {
     if (!document.body || document.getElementById('environment-iframe')) return;
 
+    // --- 1) Inject the background iframe (wind + leaves canvas) ---
     const iframe = document.createElement('iframe');
     iframe.id = 'environment-iframe';
     iframe.src = 'environment.html'; // must exist in the same folder
@@ -18,7 +19,7 @@
       border: '0',
       background: 'transparent',
       pointerEvents: 'none',
-      zIndex: '0'
+      zIndex: '0' // sits behind main content
     });
 
     // Put it under everything
@@ -30,6 +31,20 @@
       if (!wrap.style.position) wrap.style.position = 'relative';
       if (!wrap.style.zIndex) wrap.style.zIndex = '1';
     }
+
+    // --- 2) Inject environment.js into the TOP document (poem + butterfly) ---
+    if (!document.querySelector('script[data-env-js="1"]')) {
+      const s = document.createElement('script');
+      s.src = 'environment.js';          // same folder
+      s.defer = true;                    // do not block
+      s.async = false;                   // preserve order relative to this loader
+      s.dataset.envJs = '1';
+      s.onload = () => console.log('[environment-loader] environment.js loaded');
+      s.onerror = () => console.warn('[environment-loader] FAILED to load environment.js');
+      document.head.appendChild(s);
+    }
+
+    console.log('[environment-loader] environment iframe injected');
   }
 
   if (document.readyState === 'loading') {
