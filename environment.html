@@ -26,7 +26,7 @@
   new ResizeObserver(resize).observe(canvas);
   resize();
 
-  // Gentle wind lines + floating leaves (very subtle)
+  // Gentle wind lines + floating leaves (slower)
   const STREAMS = 16, LEAVES = 48;
   const LINE = 'rgba(173,190,230,0.08)';
   const LEAF_STROKE = 'rgba(200,220,255,0.28)';
@@ -48,30 +48,29 @@
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const W = canvas.clientWidth, H = canvas.clientHeight;
 
-    // wind lines
+    // wind lines (slower lateral drift)
     ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
     for (const ln of lines){
-      ln.x = wrap01(ln.x + dt * 0.00003);
+      ln.x = wrap01(ln.x + dt * 0.00002);                 // ↓ was 0.00003
       const x0 = ln.x * W, y0 = ln.y * H, pxLen = ln.len * W;
       ctx.lineWidth = ln.th;
       ctx.beginPath();
       const segs = 10;
       for (let i=0;i<=segs;i++){
         const u=i/segs, x=x0+u*pxLen;
-        const y=y0 + Math.sin(ln.phase + now*0.002 + u*4)*ln.amp
+        const y=y0 + Math.sin(ln.phase + now*0.0016 + u*4)*ln.amp   // ↓ was 0.002
                     + Math.cos(ln.phase*1.37 + u*2)*(ln.amp*0.25);
         i?ctx.lineTo(x,y):ctx.moveTo(x,y);
       }
       ctx.stroke();
     }
 
-    // leaves
+    // leaves (slower drift/bob/spin)
     ctx.lineWidth = 1; ctx.strokeStyle = LEAF_STROKE; ctx.fillStyle = LEAF_FILL;
     for (const leaf of leaves){
-     leaf.x = wrap01(leaf.x + dt*0.000045 + Math.sin(now*0.00026 + leaf.phase)*0.00002); // slower drift
-     leaf.y = wrap01(leaf.y + leaf.driftY*dt*0.00003 + Math.cos(now*0.00020 + leaf.phase)*0.000035); // slower bob
-     leaf.rot += leaf.spin * dt * 0.7; // slower spin
-
+      leaf.x = wrap01(leaf.x + dt*0.000035 + Math.sin(now*0.00020 + leaf.phase)*0.000015); // ↓ all slightly slower
+      leaf.y = wrap01(leaf.y + leaf.driftY*dt*0.000025 + Math.cos(now*0.00016 + leaf.phase)*0.000028);
+      leaf.rot += leaf.spin * dt * 0.55;
 
       const cx = leaf.x * W, cy = leaf.y * H, s = leaf.s;
       ctx.save(); ctx.translate(cx,cy); ctx.rotate(leaf.rot);
