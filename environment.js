@@ -30,20 +30,23 @@ const CFG = {
     poemShadow: 'rgba(0,0,0,.35)',
     reveal: '#ffffff'
   },
-oem: {
-  lines: [
-    "Falling in love was never the plan,",
-    "Like leaves in the wind, it softly began,",
-    "Your breath brushed my world into motion,",
-    "For life's breath is the wind, and the wind is you."
-  ],
-  betweenLinesMinMs: 16_000,
-  betweenLinesMaxMs: 18_000,
-  driftDurationMs: 38_000,
-  driftFontMin: 13,
-  driftFontMax: 16,
-  firstLineDelayMaxMs: 120_000
-},
+  poem: {
+    lines: [
+      "Falling in love was never the plan,",
+      "Like leaves in the wind, it softly began,",
+      "Your breath brushed my world into motion,",
+      "Love is the wind, and the wind is you."
+    ],
+    // >>> Slower cadence between lines (want mostly one line visible at a time)
+    betweenLinesMinMs: 16_000,
+    betweenLinesMaxMs: 18_000,
+    // >>> Slower left→right traverse
+    driftDurationMs: 38_000,
+    driftFontMin: 13,
+    driftFontMax: 16,
+    // First line still appears within 0–120s after page load (unchanged)
+    firstLineDelayMaxMs: 120_000
+  },
   reveal: {
     enabled: true,
     appearAfterLastLineMs: 30_000,
