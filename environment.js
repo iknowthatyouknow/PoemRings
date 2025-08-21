@@ -21,7 +21,7 @@ var CFG = {
       "Falling in love was never the plan,",
       "Like leaves in the wind, it softly began,",
       "Your breath brushed my world into motion,",
-      "Love is the wind, and the wind is you."
+      "For lifes Breath is the wind, and the wind is you."
     ],
     firstLineDelayMaxMs: 120000,     // 0–120s
     betweenLinesMinMs: 16000,        // 16–18s (more separation; ~one line at a time)
