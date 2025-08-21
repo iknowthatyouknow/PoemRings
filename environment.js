@@ -1,31 +1,24 @@
 /* =========================================================================
-   environment.js
+   environment.js  (compat-safe; no numeric separators; no ruleset drift)
    - Background-only effects (NO changes to index.html)
-   - Keeps existing wind/leaves intact
-   - Adds "poem in the wind" drift + bottom reveal
-   - Adds subtle blue butterfly (reduced brightness) that also signals status
+   - Leaves stay as-is (from environment.html)
+   - Adds poem drift + bottom reveal
+   - Adds subtle status butterfly
    ======================================================================== */
 
 /* --------------------------
-   Utilities
+   Utilities (compat-safe)
 --------------------------- */
-const wait = (ms) => new Promise(res => setTimeout(res, ms));
-const rand = (a, b) => a + Math.random() * (b - a));
-const randi = (a, b) => Math.floor(rand(a, b + 1));
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function wait(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+function rand(a,b){ return a + Math.random()*(b-a); }
+function randi(a,b){ return Math.floor(rand(a, b+1)); }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
 
 /* --------------------------
-   Config (tuned to your ruleset)
+   Config (per ruleset)
 --------------------------- */
-const CFG = {
-  z: {
-    // Background leaves stay under content via iframe.
-    // Poem and bottom reveal render above content but ignore pointer events.
-    leaves: 2,
-    poem:  2,   // overlay above page content
-    reveal: 3,  // bottom reveal above poem drift
-    debug:  9
-  },
+var CFG = {
+  z: { leaves: 2, poem: 3, reveal: 4, debug: 9 },
   colors: {
     poemLine: '#ffffff',
     poemShadow: 'rgba(0,0,0,.35)',
@@ -38,94 +31,98 @@ const CFG = {
       "Your breath brushed my world into motion,",
       "Love is the wind, and the wind is you."
     ],
-    firstLineDelayMaxMs: 120_000,   // 0–120s window
-    betweenLinesMinMs: 10_000,      // 10–12s as requested
-    betweenLinesMaxMs: 12_000,
-    driftDurationMs: 26_000,        // slower left→right
+    firstLineDelayMaxMs: 120000,     // 0–120s
+    betweenLinesMinMs: 16000,        // 16–18s (slower sequencing; ~one at a time)
+    betweenLinesMaxMs: 18000,
+    driftDurationMs: 26000,          // slower cross-screen
     driftFontMin: 13,
     driftFontMax: 16,
-    fadeEdge: 0.18                   // fade in first 18%, fade out last 18%
+    fadeEdge: 0.20                   // earlier fade in/out window (readability)
   },
   reveal: {
     enabled: true,
-    appearAfterLastLineMs: 30_000,   // 30s after last drift line
+    appearAfterLastLineMs: 30000,    // 30s after final drift line
     rowPadding: 10,
     fontSizePx: 16,
-    wordFadeTotalMs: 15_000,         // per two-line phase (unchanged)
+    wordFadeTotalMs: 15000,          // per two-line phase (unchanged)
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
     border: '1px solid rgba(255,255,255,.08)'
   },
   butterflies: {
-    minEveryMs: 60_000,
-    maxEveryMs: 90_000,
-    travelMsMin: 12_000,
-    travelMsMax: 18_000,
+    minEveryMs: 60000,
+    maxEveryMs: 90000,
+    travelMsMin: 12000,
+    travelMsMax: 18000,
     sizeMin: 20,
     sizeMax: 28,
     tint: {
-      waiting: 'rgba(255, 230, 120, 0.50)', // yellow (scheduled)
-      playing: 'rgba(120, 200, 255, 0.55)', // cyan/blue (running)
-      done:    'rgba(140, 235, 170, 0.55)', // green (finished)
-      warn:    'rgba(255, 120, 120, 0.55)'  // red (no start >130s)
+      waiting: 'rgba(255, 230, 120, 0.50)', // yellow: scheduled/waiting
+      playing: 'rgba(120, 200, 255, 0.55)', // cyan/blue: in progress
+      done:    'rgba(140, 235, 170, 0.55)', // green: finished
+      warn:    'rgba(255, 120, 120, 0.55)'  // red: watchdog warning
     }
   }
 };
 
 /* --------------------------
-   Layers
+   Root layers (no index.html edits)
 --------------------------- */
-// Root the leaves remain in the iframe (environment.html). We keep this node
-// for any future back-layer needs, but poem/reveal go to top overlay layers.
-const envRoot = (() => {
-  let el = document.getElementById('env-root');
-  if (!el) {
+var envRoot = (function(){
+  var el = document.getElementById('env-root');
+  if (!el){
     el = document.createElement('div');
     el.id = 'env-root';
-    Object.assign(el.style, {
-      position: 'fixed',
-      inset: '0',
-      zIndex: '0',
-      pointerEvents: 'none'
-    });
+    el.style.position = 'fixed';
+    el.style.inset = '0';
+    el.style.zIndex = '0';
+    el.style.pointerEvents = 'none';
     document.body.appendChild(el);
   }
   return el;
 })();
 
-// Poem layer: attach directly to BODY, fixed, above main content.
-const poemLayer = (() => {
-  let el = document.getElementById('env-poem');
-  if (!el) {
+var leavesLayer = (function(){
+  var el = document.getElementById('env-leaves');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'env-leaves';
+    el.style.position = 'absolute';
+    el.style.inset = '0';
+    el.style.zIndex = String(CFG.z.leaves);
+    el.style.pointerEvents = 'none';
+    envRoot.appendChild(el);
+  }
+  return el;
+})();
+
+var poemLayer = (function(){
+  var el = document.getElementById('env-poem');
+  if (!el){
     el = document.createElement('div');
     el.id = 'env-poem';
-    Object.assign(el.style, {
-      position: 'fixed',
-      inset: '0',
-      zIndex: String(CFG.z.poem),
-      pointerEvents: 'none',
-      overflow: 'hidden'
-    });
-    document.body.appendChild(el);
+    el.style.position = 'absolute';
+    el.style.inset = '0';
+    el.style.zIndex = String(CFG.z.poem);
+    el.style.pointerEvents = 'none';
+    el.style.overflow = 'hidden';
+    envRoot.appendChild(el);
   }
   return el;
 })();
 
-// Bottom reveal layer: also on BODY, centered.
-const revealLayer = (() => {
-  let el = document.getElementById('env-reveal');
-  if (!el) {
+var revealLayer = (function(){
+  var el = document.getElementById('env-reveal');
+  if (!el){
     el = document.createElement('div');
     el.id = 'env-reveal';
-    Object.assign(el.style, {
-      position: 'fixed',
-      left: '0',
-      right: '0',
-      bottom: '0',
-      zIndex: String(CFG.z.reveal),
-      pointerEvents: 'none',
-      display: 'flex',
-      justifyContent: 'center'
-    });
+    el.style.position = 'fixed';
+    el.style.left = '0';
+    el.style.right = '0';
+    el.style.bottom = '0';
+    el.style.zIndex = String(CFG.z.reveal);
+    el.style.pointerEvents = 'none';
+    el.style.display = 'flex';
+    el.style.justifyContent = 'center';
     document.body.appendChild(el);
   }
   return el;
@@ -134,49 +131,13 @@ const revealLayer = (() => {
 /* --------------------------
    Scoped styles
 --------------------------- */
-(() => {
-  const css = `
-  .env-poem-line {
-    position: absolute;
-    white-space: nowrap;
-    color: ${CFG.colors.poemLine};
-    text-shadow: 0 1px 3px ${CFG.colors.poemShadow};
-    opacity: 0.0;
-    font-weight: 600;
-    letter-spacing: .2px;
-    user-select: none;
-    will-change: transform, opacity;
-    pointer-events: none;
-  }
-  .env-reveal-bar {
-    max-width: 980px;
-    width: calc(100vw - 24px);
-    margin: 0 12px 10px;
-    background: ${CFG.reveal.barBg};
-    border: ${CFG.reveal.border};
-    border-radius: 10px;
-    padding: ${CFG.reveal.rowPadding}px 14px;
-    color: ${CFG.colors.reveal};
-    font-size: ${CFG.reveal.fontSizePx}px;
-    line-height: 1.4;
-    letter-spacing: .2px;
-    display: none;
-    text-align: center; /* center content inside the bar */
-  }
-  .env-reveal-line {
-    display: inline-block;
-    margin-right: .75em;
-    white-space: nowrap;
-    opacity: 1;
-  }
-  .env-reveal-word {
-    display: inline-block;
-    opacity: 0.0;
-    will-change: opacity, transform;
-    transform: translateY(4px);
-  }
-  `;
-  const tag = document.createElement('style');
+(function(){
+  var css =
+  ".env-poem-line{position:absolute;white-space:nowrap;color:"+CFG.colors.poemLine+";text-shadow:0 1px 3px "+CFG.colors.poemShadow+";opacity:.95;font-weight:600;letter-spacing:.2px;user-select:none;will-change:transform,opacity;pointer-events:none}" +
+  ".env-reveal-bar{max-width:980px;width:calc(100vw - 24px);margin:0 12px 10px;background:"+CFG.reveal.barBg+";border:"+CFG.reveal.border+";border-radius:10px;padding:"+CFG.reveal.rowPadding+"px 14px;color:"+CFG.colors.reveal+";font-size:"+CFG.reveal.fontSizePx+"px;line-height:1.45;letter-spacing:.2px;display:none;text-align:center}" +
+  ".env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1}" +
+  ".env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px)}";
+  var tag = document.createElement('style');
   tag.textContent = css;
   document.head.appendChild(tag);
 })();
@@ -184,191 +145,193 @@ const revealLayer = (() => {
 /* --------------------------
    Poem status (for butterfly tint)
 --------------------------- */
-const poemStatus = { state: 'waiting', set(next){ this.state = next; } };
+var poemStatus = { state: 'waiting', set: function(next){ this.state = next; } };
 
 /* --------------------------
    Poem: drifting lines
 --------------------------- */
-async function runPoemDrift() {
-  try {
-    const t0 = randi(0, CFG.poem.firstLineDelayMaxMs);
-    let started = false;
+function runPoemDrift(){
+  (function(){ // watchdog
+    wait(130000).then(function(){
+      if (poemStatus.state === 'waiting'){ poemStatus.set('warn'); }
+    });
+  })();
 
-    // Watchdog (optional visual signal via butterfly tint)
-    (async () => { await wait(130_000); if (!started) poemStatus.set('warn'); })();
-
-    await wait(t0);
-    started = true;
+  var delay0 = randi(0, CFG.poem.firstLineDelayMaxMs);
+  wait(delay0).then(function(){
     poemStatus.set('playing');
 
-    for (let i = 0; i < CFG.poem.lines.length; i++) {
-      spawnDriftingLine(CFG.poem.lines[i]);
-      if (i < CFG.poem.lines.length - 1) {
-        await wait(randi(CFG.poem.betweenLinesMinMs, CFG.poem.betweenLinesMaxMs));
+    (function playLines(i){
+      if (i >= CFG.poem.lines.length){
+        if (CFG.reveal.enabled){
+          wait(CFG.reveal.appearAfterLastLineMs).then(runRevealSequence).then(function(){
+            poemStatus.set('done');
+          });
+        } else {
+          poemStatus.set('done');
+        }
+        return;
       }
-    }
-
-    if (CFG.reveal.enabled) {
-      await wait(CFG.reveal.appearAfterLastLineMs);
-      await runRevealSequence();
-    }
-
-    poemStatus.set('done');
-  } catch (e) {
-    console.error('Poem drift error:', e);
-    poemStatus.set('warn');
-  }
+      spawnDriftingLine(CFG.poem.lines[i]);
+      if (i < CFG.poem.lines.length - 1){
+        wait(randi(CFG.poem.betweenLinesMinMs, CFG.poem.betweenLinesMaxMs)).then(function(){
+          playLines(i+1);
+        });
+      } else {
+        playLines(i+1);
+      }
+    })(0);
+  });
 }
 
-function spawnDriftingLine(text) {
-  const el = document.createElement('div');
+function spawnDriftingLine(text){
+  var el = document.createElement('div');
   el.className = 'env-poem-line';
   el.textContent = text;
 
-  const fontSize = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
-  el.style.fontSize = `${fontSize}px`;
+  var fontSize = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
+  el.style.fontSize = String(fontSize)+'px';
 
-  // Random vertical band; avoid very top UI
-  const minY = 90;
-  const maxY = Math.max(minY + 60, window.innerHeight - 100);
-  const y = randi(minY, maxY);
-  el.style.top = `${y}px`;
+  var minY = 90;
+  var maxY = Math.max(minY + 60, window.innerHeight - 100);
+  var y = randi(minY, maxY);
+  el.style.top = String(y)+'px';
 
-  // Start just off-screen left; make sure they’re readable immediately.
-  const approximateWidth = Math.max(200, text.length * (fontSize * 0.62));
-  const startX = -approximateWidth;           // off-screen
-  const endX   = window.innerWidth + 80;      // off-screen right
+  var startX = -Math.max(120, text.length * (fontSize * 0.6));
+  var endX = window.innerWidth + 80;
 
   poemLayer.appendChild(el);
 
-  const dur = CFG.poem.driftDurationMs;
-  const fadeEdge = clamp(CFG.poem.fadeEdge, 0.05, 0.3); // 5–30% window
-  const t0 = performance.now();
+  var dur = CFG.poem.driftDurationMs;
+  var tStart = performance.now();
+  var fadeEdge = CFG.poem.fadeEdge; // fade window at each edge
 
-  function step(t) {
-    const k = clamp((t - t0) / dur, 0, 1);
-    const x = startX + (endX - startX) * k;
-    el.style.transform = `translate(${x}px, 0)`;
+  function step(t){
+    var k = clamp((t - tStart)/dur, 0, 1);
+    var x = startX + (endX - startX) * k;
 
-    // Smooth fade near edges (visible earlier)
-    let o = 1;
-    if (k < fadeEdge) o = k / fadeEdge;
-    else if (k > 1 - fadeEdge) o = (1 - k) / fadeEdge;
-    el.style.opacity = String(o);
+    // smoothstep ease for entry/exit opacity
+    var fade;
+    if (k < fadeEdge){
+      var u = k / fadeEdge; fade = u*u*(3-2*u);
+    } else if (k > 1 - fadeEdge){
+      var v = (1 - k) / fadeEdge; fade = v*v*(3-2*v);
+    } else {
+      fade = 1;
+    }
 
-    if (k < 1) requestAnimationFrame(step);
-    else el.remove();
+    el.style.transform = "translate("+x+"px,0)";
+    el.style.opacity = String(0.95 * fade);
+
+    if (k < 1){ requestAnimationFrame(step); }
+    else { el.remove(); }
   }
   requestAnimationFrame(step);
 }
 
 /* --------------------------
-   Bottom reveal (word-by-word, phased)
+   Bottom reveal (word-by-word, centered)
 --------------------------- */
-async function runRevealSequence() {
-  const bar = document.createElement('div');
+function runRevealSequence(){
+  var bar = document.createElement('div');
   bar.className = 'env-reveal-bar';
   revealLayer.appendChild(bar);
 
-  // Build lines/words with explicit spacing nodes for reliable gaps
-  const lines = CFG.poem.lines.map(line => {
-    const lineEl = document.createElement('span');
+  // Build words with real spaces between (no run-together)
+  var lines = CFG.poem.lines.map(function(line){
+    var lineEl = document.createElement('span');
     lineEl.className = 'env-reveal-line';
 
-    const rawWords = line.split(' ');
-    const words = [];
-
-    rawWords.forEach((w, idx) => {
-      const span = document.createElement('span');
-      span.className = 'env-reveal-word';
-      span.textContent = w;
-      lineEl.appendChild(span);
-      words.push(span);
-
-      // add an explicit space node between words to avoid any spacing collapse
-      if (idx < rawWords.length - 1) {
-        lineEl.appendChild(document.createTextNode(' '));
+    var tokens = line.split(' ');
+    var words = [];
+    for (var i=0;i<tokens.length;i++){
+      var w = document.createElement('span');
+      w.className = 'env-reveal-word';
+      w.textContent = tokens[i];
+      w.style.transition = 'opacity 600ms ease, transform 600ms ease';
+      lineEl.appendChild(w);
+      if (i < tokens.length - 1){
+        lineEl.appendChild(document.createTextNode(' ')); // real space node
       }
-    });
-
+      words.push(w);
+    }
     bar.appendChild(lineEl);
-    return { lineEl, words };
+    return { lineEl: lineEl, words: words };
   });
 
   bar.style.display = 'block';
 
-  // Phase A: 1→2
-  await revealWords(lines[0].words, 0.5 * CFG.reveal.wordFadeTotalMs);
-  await crossoverFade(lines[0].words, lines[1].words, 0.5 * CFG.reveal.wordFadeTotalMs);
-
-  // Phase B: 2→3 then 3→4
-  await crossoverFade(lines[1].words, lines[2].words, 0.5 * CFG.reveal.wordFadeTotalMs);
-  await crossoverFade(lines[2].words, lines[3].words, 0.5 * CFG.reveal.wordFadeTotalMs);
-
-  // Fade out the last line
-  await fadeWords(lines[3].words, 0.5 * CFG.reveal.wordFadeTotalMs);
-
-  bar.remove();
+  // Phase A: show L1 then cross-fade L1→L2
+  return revealWords(lines[0].words, 0.5*CFG.reveal.wordFadeTotalMs).then(function(){
+    return crossoverFade(lines[0].words, lines[1].words, 0.5*CFG.reveal.wordFadeTotalMs);
+  })
+  // Phase B: L2→L3 then L3→L4
+  .then(function(){ return crossoverFade(lines[1].words, lines[2].words, 0.5*CFG.reveal.wordFadeTotalMs); })
+  .then(function(){ return crossoverFade(lines[2].words, lines[3].words, 0.5*CFG.reveal.wordFadeTotalMs); })
+  // Fade out L4 word-by-word
+  .then(function(){ return fadeWords(lines[3].words, 0.5*CFG.reveal.wordFadeTotalMs); })
+  .then(function(){ bar.remove(); });
 }
 
-// Smooth reveal: apply transition, then flip opacity on next frame
-async function revealWords(words, totalMs) {
-  const per = totalMs / Math.max(1, words.length);
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    w.style.transition = 'opacity 600ms cubic-bezier(.22,.61,.36,1), transform 600ms cubic-bezier(.22,.61,.36,1)';
-    // ensure transition is registered before style change
-    await new Promise(r => requestAnimationFrame(r));
-    w.style.opacity = '1';
-    w.style.transform = 'translateY(0px)';
-    await wait(per);
-  }
+function revealWords(words, totalMs){
+  var per = totalMs / Math.max(1, words.length);
+  var i = 0;
+  return new Promise(function(done){
+    (function tick(){
+      if (i >= words.length) return done();
+      var w = words[i++];
+      w.style.opacity = '1';
+      w.style.transform = 'translateY(0px)';
+      setTimeout(tick, per);
+    })();
+  });
 }
 
-// Crossfade word-by-word: next-frame commit to avoid “popping”
-async function crossoverFade(outgoingWords, incomingWords, totalMs) {
-  const steps = Math.max(outgoingWords.length, incomingWords.length);
-  const per = totalMs / Math.max(1, steps);
+function crossoverFade(outgoingWords, incomingWords, totalMs){
+  var steps = Math.max(outgoingWords.length, incomingWords.length);
+  var per = totalMs / Math.max(1, steps);
+  var i = 0;
+  return new Promise(function(done){
+    (function tick(){
+      if (i >= steps) return done();
 
-  for (let i = 0; i < steps; i++) {
-    if (i < incomingWords.length) {
-      const wIn = incomingWords[i];
-      wIn.style.transition = 'opacity 600ms cubic-bezier(.22,.61,.36,1), transform 600ms cubic-bezier(.22,.61,.36,1)';
-      await new Promise(r => requestAnimationFrame(r));
-      wIn.style.opacity = '1';
-      wIn.style.transform = 'translateY(0px)';
-    }
-    if (i < outgoingWords.length) {
-      const wOut = outgoingWords[i];
-      wOut.style.transition = 'opacity 600ms cubic-bezier(.22,.61,.36,1), transform 600ms cubic-bezier(.22,.61,.36,1)';
-      await new Promise(r => requestAnimationFrame(r));
-      wOut.style.opacity = '0';
-      wOut.style.transform = 'translateY(4px)';
-    }
-    await wait(per);
-  }
+      if (i < incomingWords.length){
+        var wIn = incomingWords[i];
+        wIn.style.opacity = '1';
+        wIn.style.transform = 'translateY(0px)';
+      }
+      if (i < outgoingWords.length){
+        var wOut = outgoingWords[i];
+        wOut.style.opacity = '0';
+        wOut.style.transform = 'translateY(4px)';
+      }
+      i++;
+      setTimeout(tick, per);
+    })();
+  });
 }
 
-async function fadeWords(words, totalMs) {
-  const per = totalMs / Math.max(1, words.length);
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    w.style.transition = 'opacity 600ms cubic-bezier(.22,.61,.36,1), transform 600ms cubic-bezier(.22,.61,.36,1)';
-    await new Promise(r => requestAnimationFrame(r));
-    w.style.opacity = '0';
-    w.style.transform = 'translateY(4px)';
-    await wait(per);
-  }
+function fadeWords(words, totalMs){
+  var per = totalMs / Math.max(1, words.length);
+  var i = 0;
+  return new Promise(function(done){
+    (function tick(){
+      if (i >= words.length) return done();
+      var w = words[i++];
+      w.style.opacity = '0';
+      w.style.transform = 'translateY(4px)';
+      setTimeout(tick, per);
+    })();
+  });
 }
 
 /* --------------------------
    Butterfly (reduced brightness + status tint)
 --------------------------- */
-function spawnButterfly() {
-  const size = randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
-
-  const tint = (() => {
-    switch (poemStatus.state) {
+function spawnButterfly(){
+  var size = randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
+  var tint = (function(){
+    switch (poemStatus.state){
       case 'playing': return CFG.butterflies.tint.playing;
       case 'done':    return CFG.butterflies.tint.done;
       case 'warn':    return CFG.butterflies.tint.warn;
@@ -376,67 +339,61 @@ function spawnButterfly() {
     }
   })();
 
-  const el = document.createElement('div');
-  Object.assign(el.style, {
-    position: 'absolute',
-    top: `${randi(40, Math.max(120, window.innerHeight / 2))}px`,
-    left: '0px',
-    width: `${size}px`,
-    height: `${size}px`,
-    opacity: '1',
-    pointerEvents: 'none',
-    zIndex: String(CFG.z.poem), // weave above content but below reveal bar
-    willChange: 'transform'
-  });
+  var el = document.createElement('div');
+  el.style.position = 'absolute';
+  el.style.top = String(randi(40, Math.max(120, Math.floor(window.innerHeight/2))))+'px';
+  el.style.left = '0px';
+  el.style.width = String(size)+'px';
+  el.style.height = String(size)+'px';
+  el.style.opacity = '1';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = String(CFG.z.leaves);
+  el.style.willChange = 'transform';
 
-  el.innerHTML = `
-  <svg viewBox="0 0 120 80" width="${size}" height="${size}" style="display:block">
-    <defs>
-      <filter id="bshadow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="rgba(0,0,0,0.35)"/>
-      </filter>
-    </defs>
-    <g filter="url(#bshadow)">
-      <path d="M60,40 C30,5 5,5 10,35 C15,60 35,55 60,40 Z" fill="${tint}" />
-      <path d="M60,40 C90,5 115,5 110,35 C105,60 85,55 60,40 Z" fill="${tint}" />
-      <rect x="57" y="35" width="6" height="16" rx="3" fill="rgba(30,40,60,0.6)"/>
-    </g>
-  </svg>`;
+  el.innerHTML =
+    '<svg viewBox="0 0 120 80" width="'+size+'" height="'+size+'" style="display:block">'+
+      '<defs><filter id="bshadow" x="-30%" y="-30%" width="160%" height="160%">'+
+      '<feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="rgba(0,0,0,0.35)"/></filter></defs>'+
+      '<g filter="url(#bshadow)">'+
+        '<path d="M60,40 C30,5 5,5 10,35 C15,60 35,55 60,40 Z" fill="'+tint+'"/>'+
+        '<path d="M60,40 C90,5 115,5 110,35 C105,60 85,55 60,40 Z" fill="'+tint+'"/>'+
+        '<rect x="57" y="35" width="6" height="16" rx="3" fill="rgba(30,40,60,0.6)"/>'+
+      '</g></svg>';
 
-  document.body.appendChild(el);
+  leavesLayer.appendChild(el);
 
-  const fromLeft = Math.random() < 0.5;
-  const startX = fromLeft ? -40 : (window.innerWidth + 40);
-  const endX   = fromLeft ? (window.innerWidth + 40) : -40;
-  const baseTop = parseFloat(el.style.top);
-  const travelMs = randi(CFG.butterflies.travelMsMin, CFG.butterflies.travelMsMax);
-  const t0 = performance.now();
+  var fromLeft = Math.random() < 0.5;
+  var startX = fromLeft ? -40 : (window.innerWidth + 40);
+  var endX   = fromLeft ? (window.innerWidth + 40) : -40;
+  var baseTop = parseFloat(el.style.top);
+  var travelMs = randi(CFG.butterflies.travelMsMin, CFG.butterflies.travelMsMax);
+  var tStart = performance.now();
 
-  function anim(t) {
-    const k = clamp((t - t0) / travelMs, 0, 1);
-    const x = startX + (endX - startX) * k;
-    const flutterY = Math.sin(k * Math.PI * 3) * 40;
-    const y = baseTop + flutterY;
-    el.style.transform = `translate(${x}px, ${y - baseTop}px)`;
+  function anim(t){
+    var k = clamp((t - tStart)/travelMs, 0, 1);
+    var x = startX + (endX - startX) * k;
+    var flutterY = Math.sin(k * Math.PI * 3) * 40;
+    var y = baseTop + flutterY;
+    el.style.transform = "translate("+x+"px,"+(y - baseTop)+"px)";
     if (k < 1) requestAnimationFrame(anim);
     else el.remove();
   }
   requestAnimationFrame(anim);
 }
 
-async function runButterfliesLoop() {
-  await wait(randi(6_000, 14_000)); // early status ping
-  spawnButterfly();
-  while (true) {
-    await wait(randi(CFG.butterflies.minEveryMs, CFG.butterflies.maxEveryMs));
-    spawnButterfly();
-  }
+function runButterfliesLoop(){
+  wait(randi(6000, 14000)).then(function(){ spawnButterfly(); });
+  (function loop(){
+    wait(randi(CFG.butterflies.minEveryMs, CFG.butterflies.maxEveryMs)).then(function(){
+      spawnButterfly(); loop();
+    });
+  })();
 }
 
 /* --------------------------
    Orchestrate
 --------------------------- */
-async function main() {
+function main(){
   runPoemDrift();
   runButterfliesLoop();
 }
