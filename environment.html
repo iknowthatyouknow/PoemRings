@@ -51,7 +51,7 @@
     // wind lines
     ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
     for (const ln of lines){
-      ln.x = wrap01(ln.x + dt * 0.00005);
+      ln.x = wrap01(ln.x + dt * 0.00003);
       const x0 = ln.x * W, y0 = ln.y * H, pxLen = ln.len * W;
       ctx.lineWidth = ln.th;
       ctx.beginPath();
@@ -68,9 +68,10 @@
     // leaves
     ctx.lineWidth = 1; ctx.strokeStyle = LEAF_STROKE; ctx.fillStyle = LEAF_FILL;
     for (const leaf of leaves){
-      leaf.x = wrap01(leaf.x + dt*0.00008 + Math.sin(now*0.0003 + leaf.phase)*0.00003);
-      leaf.y = wrap01(leaf.y + leaf.driftY*dt*0.00005 + Math.cos(now*0.00025 + leaf.phase)*0.00005);
-      leaf.rot += leaf.spin * dt;
+     leaf.x = wrap01(leaf.x + dt*0.000045 + Math.sin(now*0.00026 + leaf.phase)*0.00002); // slower drift
+     leaf.y = wrap01(leaf.y + leaf.driftY*dt*0.00003 + Math.cos(now*0.00020 + leaf.phase)*0.000035); // slower bob
+     leaf.rot += leaf.spin * dt * 0.7; // slower spin
+
 
       const cx = leaf.x * W, cy = leaf.y * H, s = leaf.s;
       ctx.save(); ctx.translate(cx,cy); ctx.rotate(leaf.rot);
