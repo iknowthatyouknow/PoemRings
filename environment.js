@@ -4,19 +4,19 @@
    - Keeps existing wind/leaves intact (wind speed is in environment.html)
    - Slower poem drift + wider spacing between lines
    - Slower butterfly flight (gentler flutter)
-   - Bottom reveal unchanged
+   - Bottom reveal unchanged (centered, smooth, with proper spaces)
    ======================================================================== */
 
 /* --------------------------
    Utilities
 --------------------------- */
 const wait = (ms) => new Promise(res => setTimeout(res, ms));
-const rand = (a, b) => a + Math.random() * (b - a));
+const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /* --------------------------
-   Config (tuned to your ruleset)
+   Config (ruleset-aligned)
 --------------------------- */
 const CFG = {
   z: {
@@ -30,50 +30,50 @@ const CFG = {
     poemShadow: 'rgba(0,0,0,.35)',
     reveal: '#ffffff'
   },
- poem: {
-  lines: [
-    "Falling in love was never the plan,",
-    "Like leaves in the wind, it softly began,",
-    "Your breath brushed my world into motion,",
-    "For life's breath is the wind, and the wind is you."
-  ],
-  firstLineDelayMaxMs: 120_000,
-  betweenLinesMinMs: 16_000,  // was 10_000
-  betweenLinesMaxMs: 18_000,  // was 12_000
-  driftDurationMs: 32_000,    // was 26_000 (slower cross-screen)
-  driftFontMin: 13,
-  driftFontMax: 16
-},
+  poem: {
+    lines: [
+      "Falling in love was never the plan,",
+      "Like leaves in the wind, it softly began,",
+      "Your breath brushed my world into motion,",
+      "For life's breath is the wind, and the wind is you."
+    ],
+    firstLineDelayMaxMs: 120_000,   // first line within 0–120s
+    betweenLinesMinMs: 16_000,      // spacing so you mostly see one line at a time
+    betweenLinesMaxMs: 18_000,
+    driftDurationMs: 32_000,        // slower cross-screen (was 26_000)
+    driftFontMin: 13,
+    driftFontMax: 16
+  },
   reveal: {
     enabled: true,
-    appearAfterLastLineMs: 30_000,
+    appearAfterLastLineMs: 30_000,  // 30s after last drift
     rowPadding: 10,
     fontSizePx: 16,
-    wordFadeTotalMs: 15_000,
+    wordFadeTotalMs: 15_000,        // per two-line phase as specified
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
     border: '1px solid rgba(255,255,255,.08)'
   },
   butterflies: {
-    // >>> Slower flight (longer traversal), softer flutter
+    // Slower flight + gentler flutter (brightness unchanged, already reduced earlier)
     minEveryMs: 60_000,
     maxEveryMs: 90_000,
-    travelMsMin: 18_000,  // was 12_000
-    travelMsMax: 26_000,  // was 18_000
+    travelMsMin: 18_000,   // slower (was 12_000)
+    travelMsMax: 26_000,   // slower (was 18_000)
     sizeMin: 20,
     sizeMax: 28,
     tint: {
-      waiting: 'rgba(255, 230, 120, 0.50)',
-      playing: 'rgba(120, 200, 255, 0.55)',
-      done:    'rgba(140, 235, 170, 0.55)',
-      warn:    'rgba(255, 120, 120, 0.55)'
+      waiting: 'rgba(255, 230, 120, 0.50)', // yellow (scheduled, waiting)
+      playing: 'rgba(120, 200, 255, 0.55)', // cyan/blue (in progress)
+      done:    'rgba(140, 235, 170, 0.55)', // green (finished)
+      warn:    'rgba(255, 120, 120, 0.55)'  // red (no start > 130s)
     },
-    flutterWaves: 2,   // was 3
-    flutterAmp: 28     // was 40
+    flutterWaves: 2,  // gentler (was 3)
+    flutterAmp: 28    // gentler (was 40)
   }
 };
 
 /* --------------------------
-   Root layers
+   Root layers (non-invasive)
 --------------------------- */
 const envRoot = (() => {
   let el = document.getElementById('env-root');
@@ -145,7 +145,7 @@ const revealLayer = (() => {
 })();
 
 /* --------------------------
-   Style injection (scoped)
+   Scoped styles (no drift)
 --------------------------- */
 (() => {
   const css = `
@@ -173,8 +173,10 @@ const revealLayer = (() => {
     font-size: ${CFG.reveal.fontSizePx}px;
     line-height: 1.4;
     letter-spacing: .2px;
-    display: none;
-    text-align: center; /* keep centered */
+    display: none;              /* shown when we render */
+    text-align: center;         /* centered content */
+    white-space: nowrap;        /* single row; our phasing keeps it tidy */
+    overflow: hidden;           /* avoid accidental wrap bleed */
   }
   .env-reveal-line {
     display: inline-block;
@@ -203,13 +205,59 @@ const poemStatus = {
 };
 
 /* --------------------------
-   Poem: drifting lines (slower)
+   Poem: drifting lines (slower, earlier visibility)
 --------------------------- */
+function spawnDriftingLine(text) {
+  const el = document.createElement('div');
+  el.className = 'env-poem-line';
+  el.textContent = text;
+
+  const fontSize = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
+  el.style.fontSize = `${fontSize}px`;
+
+  const minY = 90;
+  const maxY = Math.max(minY + 60, window.innerHeight - 100);
+  const y = randi(minY, maxY);
+  el.style.top = `${y}px`;
+
+  // enter just off-screen left; exit off-screen right
+  const startX = -Math.max(120, text.length * (fontSize * 0.6));
+  const endX = window.innerWidth + 80;
+
+  poemLayer.appendChild(el);
+
+  const dur = CFG.poem.driftDurationMs;
+  const tStart = performance.now();
+  const peakOpacity = 0.95;
+
+  function step(t) {
+    const k = clamp((t - tStart) / dur, 0, 1);
+    // position (smooth S-curve to keep motion pleasant)
+    const x = startX + (endX - startX) * k;
+    const ease = k < 0.5 ? 2*k*k : -1 + (4 - 2*k) * k;
+    el.style.transform = `translate(${x}px, 0)`;
+
+    // visibility: show earlier (first 25%) and fade near exit (last 22%)
+    const fadeIn  = Math.min(1, k / 0.25);
+    const fadeOut = Math.min(1, (1 - k) / 0.22);
+    el.style.opacity = String(peakOpacity * Math.min(fadeIn, fadeOut) * (0.75 + 0.25 * ease));
+
+    if (k < 1) requestAnimationFrame(step);
+    else el.remove();
+  }
+  requestAnimationFrame(step);
+}
+
 async function runPoemDrift() {
+  // guard against accidental double-starts
+  if (window.__ENV_POEM_RUNNING__) return;
+  window.__ENV_POEM_RUNNING__ = true;
+
   try {
     const t0 = randi(0, CFG.poem.firstLineDelayMaxMs);
     let started = false;
 
+    // watchdog (tint butterfly red if nothing starts by 130s)
     (async () => {
       await wait(130_000);
       if (!started) poemStatus.set('warn');
@@ -238,60 +286,22 @@ async function runPoemDrift() {
   }
 }
 
-function spawnDriftingLine(text) {
-  const el = document.createElement('div');
-  el.className = 'env-poem-line';
-  el.textContent = text;
-
-  const fontSize = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
-  el.style.fontSize = `${fontSize}px`;
-
-  const minY = 90;
-  const maxY = Math.max(minY + 60, window.innerHeight - 100);
-  const y = randi(minY, maxY);
-  el.style.top = `${y}px`;
-
-  const startX = -Math.max(120, text.length * (fontSize * 0.6));
-  const endX = window.innerWidth + 80;
-
-  poemLayer.appendChild(el);
-
-  const dur = CFG.poem.driftDurationMs;
-  const tStart = performance.now();
-  const peakOpacity = 0.95;
-
-  function step(t) {
-    const k = clamp((t - tStart) / dur, 0, 1);
-    const x = startX + (endX - startX) * k;
-    // smooth ease (S-curve)
-    const ease = k < 0.5 ? 2*k*k : -1 + (4 - 2*k) * k;
-    el.style.transform = `translate(${x}px, 0)`;
-    // visible sooner as it enters, then fade near the exit
-    const fadeIn  = Math.min(1, k / 0.20);      // first 20% of path
-    const fadeOut = Math.min(1, (1 - k) / 0.20); // last 20% of path
-    el.style.opacity = String(peakOpacity * Math.min(fadeIn, fadeOut) * (0.75 + 0.25*ease));
-
-    if (k < 1) requestAnimationFrame(step);
-    else el.remove();
-  }
-  requestAnimationFrame(step);
-}
-
 /* --------------------------
-   Bottom reveal (unchanged)
+   Bottom reveal (centered, smooth, with spaces)
 --------------------------- */
 async function runRevealSequence() {
   const bar = document.createElement('div');
   bar.className = 'env-reveal-bar';
   revealLayer.appendChild(bar);
 
+  // Build word spans (preserve spaces)
   const lines = CFG.poem.lines.map(line => {
     const lineEl = document.createElement('span');
     lineEl.className = 'env-reveal-line';
     const words = line.split(' ').map((w, idx, arr) => {
       const span = document.createElement('span');
       span.className = 'env-reveal-word';
-      span.textContent = (idx < arr.length - 1) ? w + ' ' : w;
+      span.textContent = (idx < arr.length - 1) ? w + ' ' : w; // keep spaces
       lineEl.appendChild(span);
       return span;
     });
@@ -301,12 +311,15 @@ async function runRevealSequence() {
 
   bar.style.display = 'block';
 
+  // Phase A: L1 reveal, then L1→L2 crossover
   await revealWords(lines[0].words, 0.5 * CFG.reveal.wordFadeTotalMs);
   await crossoverFade(lines[0].words, lines[1].words, 0.5 * CFG.reveal.wordFadeTotalMs);
 
+  // Phase B: L2→L3 crossover, then L3→L4 crossover
   await crossoverFade(lines[1].words, lines[2].words, 0.5 * CFG.reveal.wordFadeTotalMs);
   await crossoverFade(lines[2].words, lines[3].words, 0.5 * CFG.reveal.wordFadeTotalMs);
 
+  // Fade out the final line word-by-word
   await fadeWords(lines[3].words, 0.5 * CFG.reveal.wordFadeTotalMs);
 
   bar.remove();
@@ -401,7 +414,7 @@ function spawnButterfly() {
 
   const fromLeft = Math.random() < 0.5;
   const startX = fromLeft ? -40 : (window.innerWidth + 40);
-  const endX = fromLeft ? (window.innerWidth + 40) : -40;
+  const endX   = fromLeft ? (window.innerWidth + 40) : -40;
   const baseTop = parseFloat(el.style.top);
 
   const travelMs = randi(CFG.butterflies.travelMsMin, CFG.butterflies.travelMsMax);
@@ -420,6 +433,7 @@ function spawnButterfly() {
 }
 
 async function runButterfliesLoop() {
+  // quick status ping
   await wait(randi(6_000, 14_000));
   spawnButterfly();
 
@@ -430,7 +444,7 @@ async function runButterfliesLoop() {
 }
 
 /* --------------------------
-   Orchestrate
+   Orchestrate (no index.html changes)
 --------------------------- */
 async function main() {
   runPoemDrift();
