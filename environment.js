@@ -38,9 +38,9 @@ const CFG = {
       "Love is the wind, and the wind is you."
     ],
     firstLineDelayMaxMs: 120_000,   // first line appears within 0–120s
-    betweenLinesMinMs: 6_000,       // 6–9s between drifting lines
-    betweenLinesMaxMs: 9_000,
-    driftDurationMs: 18_000,        // time to cross the screen left→right
+    betweenLinesMinMs: 10_000,       // 10-12 second between drifting lines
+    betweenLinesMaxMs: 12_000,
+    driftDurationMs: 26_000,        // sloer left-right (was 18_000)
     driftFontMin: 13,               // smaller than ring poem
     driftFontMax: 16
   },
@@ -179,7 +179,7 @@ const revealLayer = (() => {
     display: inline-block;
     margin-right: .75em;
     white-space: nowrap;
-    opacity: 0.0;
+    opacity: 1;
   }
   .env-reveal-word {
     display: inline-block;
