@@ -26,42 +26,46 @@
   new ResizeObserver(resize).observe(canvas);
   resize();
 
-  // Gentle wind lines + floating leaves
+  // === WIND multiplier (5 = baseline) ===
+  let WIND_SLIDER = 5;                  // receives 1..10
+  let WIND_FACTOR = WIND_SLIDER / 5;    // 1.0 at baseline
+  window.addEventListener('message', (ev) => {
+    const d = ev.data || {};
+    if (d && d.type === 'WIND_UPDATE') {
+      const v = Number(d.wind);
+      if (!Number.isNaN(v)) {
+        WIND_SLIDER = Math.min(10, Math.max(1, v));
+        WIND_FACTOR = WIND_SLIDER / 5;
+      }
+    }
+  });
+
+  // Gentle wind lines + floating leaves (very subtle)
   const STREAMS = 16, LEAVES = 48;
   const LINE = 'rgba(173,190,230,0.08)';
   const LEAF_STROKE = 'rgba(200,220,255,0.28)';
   const LEAF_FILL = 'rgba(200,220,255,0.08)';
-
   const R = (a,b)=>a+Math.random()*(b-a);
   const wrap01 = v => v < -0.2 ? v+1.4 : (v > 1.2 ? v-1.4 : v);
 
   const lines = Array.from({length: STREAMS}, () => ({
-    x:R(-0.1,1.1), y:R(0,1), len:R(0.25,0.55), amp:R(10,26),
-    phase:R(0,Math.PI*2), th:R(0.7,1.2)
+    x:R(-0.1,1.1), y:R(0,1), len:R(0.25,0.55), amp:R(10,26), phase:R(0,Math.PI*2), th:R(0.7,1.2)
   }));
   const leaves = Array.from({length: LEAVES}, () => ({
     x:R(-0.15,1.15), y:R(-0.05,1.05), s:R(6,12), rot:R(0,Math.PI*2),
     spin:R(-0.002,0.002), driftY:R(-0.03,0.03), phase:R(0,Math.PI*2)
   }));
 
-  // --- Stable timing: clamp + smooth dt to avoid long-term drift/acceleration ---
   let last = performance.now();
-  let dtAvg = 16; // ~one 60fps frame
   function tick(now){
-    const raw = now - last;
-    last = now;
-
-    // Clamp and smooth the delta-time
-    const dt = Math.max(8, Math.min(40, raw)); // 8–40ms
-    dtAvg = dtAvg * 0.9 + dt * 0.1;            // low-pass filter
-
+    const dt = Math.min(60, now - last); last = now;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const W = canvas.clientWidth, H = canvas.clientHeight;
 
-    // wind lines (slower, stable)
+    // wind lines
     ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
     for (const ln of lines){
-      ln.x = wrap01(ln.x + dtAvg * 0.000022); // was ~0.00003
+      ln.x = wrap01(ln.x + dt * 0.00003 * WIND_FACTOR);   // ← factor applied
       const x0 = ln.x * W, y0 = ln.y * H, pxLen = ln.len * W;
       ctx.lineWidth = ln.th;
       ctx.beginPath();
@@ -75,20 +79,12 @@
       ctx.stroke();
     }
 
-    // leaves (slower, stable)
+    // leaves
     ctx.lineWidth = 1; ctx.strokeStyle = LEAF_STROKE; ctx.fillStyle = LEAF_FILL;
     for (const leaf of leaves){
-      leaf.x = wrap01(
-        leaf.x
-        + dtAvg*0.000033                                  // was ~0.000045
-        + Math.sin(now*0.00024 + leaf.phase)*0.000018     // was 0.00026/0.00002
-      );
-      leaf.y = wrap01(
-        leaf.y
-        + leaf.driftY*dtAvg*0.000022                      // was 0.00003
-        + Math.cos(now*0.00018 + leaf.phase)*0.000028     // was 0.00020/0.000035
-      );
-      leaf.rot += leaf.spin * dtAvg * 0.55; // was *0.7
+      leaf.x = wrap01(leaf.x + (dt*0.000045 * WIND_FACTOR) + Math.sin(now*0.00026 + leaf.phase)*0.00002);
+      leaf.y = wrap01(leaf.y + leaf.driftY*(dt*0.00003 * WIND_FACTOR) + Math.cos(now*0.00020 + leaf.phase)*0.000035);
+      leaf.rot += leaf.spin * dt * 0.7 * WIND_FACTOR;
 
       const cx = leaf.x * W, cy = leaf.y * H, s = leaf.s;
       ctx.save(); ctx.translate(cx,cy); ctx.rotate(leaf.rot);
