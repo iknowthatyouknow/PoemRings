@@ -44,6 +44,18 @@
       document.head.appendChild(s);
     }
 
+    // --- 3) Inject windsong-controller.js AFTER environment.js ---
+    if (!document.querySelector('script[data-windsong-ctl="1"]')) {
+      const c = document.createElement('script');
+      c.src = 'windsong-controller.js';
+      c.defer = true;
+      c.async = false;
+      c.dataset.windsongCtl = '1';
+      c.onload = () => console.log('[environment-loader] windsong-controller.js loaded');
+      c.onerror = () => console.warn('[environment-loader] FAILED to load windsong-controller.js');
+      document.head.appendChild(c);
+}
+
     console.log('[environment-loader] environment iframe injected');
   }
 
