@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#000; color:#fff; overscroll-behavior:none; }
+    .app {
+      position: fixed;
+      inset: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
+             env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+      display: grid;
+      place-items: center;
+      background: #000; /* letterbox gutter behind the scaled app */
+    }
+    .stage {
+      position: relative;
+      transform-origin: top left;
+      will-change: transform;
+    }
+    iframe {
+      display: block;
+      border: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+      background: transparent;
+    }
+    .hint {
+      position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom,0);
+      text-align:center; padding:.4rem .6rem; font:12px system-ui, -apple-system, sans-serif;
+      background: rgba(0,0,0,.4); color:#ddd; opacity:0; transition:opacity .25s ease;
+      pointer-events:none; user-select:none;
+    }
+    .hint.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div id="stage" class="stage">
+      <iframe id="appFrame" allow="autoplay; clipboard-read; clipboard-write"></iframe>
+    </div>
+  </div>
+  <div id="hint" class="hint"></div>
+
+  <script>
+    // ---------- detection ----------
+    const params = new URLSearchParams(location.search);
+    const forceMobile  = params.has('mobile');
+    const forceDesktop = params.has('desktop');
+    const ua = navigator.userAgent.toLowerCase();
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const isMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/.test(ua);
+    const preferMobile = forceMobile || (!forceDesktop && (isMobileUA || (isTouch && innerWidth < 1024)));
+
+    // If NOT mobile: bounce to index.html (keep query string, minus our overrides)
+    if (!preferMobile) {
+      const kept = [...params.entries()].filter(([k]) => k !== 'mobile' && k !== 'desktop');
+      const qs = kept.length ? ('?' + new URLSearchParams(kept).toString()) : '';
+      location.replace('index.html' + qs);
+    }
+
+    // ---------- elements ----------
+    const stage = document.getElementById('stage');
+    const iframe = document.getElementById('appFrame');
+    const hint = document.getElementById('hint');
+
+    // Forward the current query string to index.html (so app features keep working)
+    iframe.src = 'index.html' + (location.search || '');
+
+    let designW = 0, designH = 0;   // will be measured ONCE and then locked
+    let measured = false;
+
+    function safeInset(which) {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(`env(safe-area-inset-${which})`);
+      const px = parseFloat(v) || 0; return isFinite(px) ? px : 0;
+    }
+
+    function setStageSize(w, h) {
+      stage.style.width  = w + 'px';
+      stage.style.height = h + 'px';
+    }
+
+    function fitScale() {
+      const vw = window.innerWidth  - (safeInset('left') + safeInset('right'));
+      const vh = window.innerHeight - (safeInset('top')  + safeInset('bottom'));
+      if (!designW || !designH) return;
+
+      const scale = Math.min(vw / designW, vh / designH);
+      const tx = (vw - designW * scale) / 2;
+      const ty = (vh - designH * scale) / 2;
+      stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+      // Optional orientation nudge
+      const needsLandscape = designW >= designH && vw < vh;
+      hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
+      hint.classList.toggle('show', !!hint.textContent);
+    }
+
+    function tryInitialMeasure() {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) return false;
+
+        // Measure the app ONCE (scroll/clients give a stable initial bounding box)
+        const w = Math.max(
+          doc.documentElement.scrollWidth,
+          doc.body?.scrollWidth || 0,
+          doc.documentElement.clientWidth
+        );
+        const h = Math.max(
+          doc.documentElement.scrollHeight,
+          doc.body?.scrollHeight || 0,
+          doc.documentElement.clientHeight
+        );
+
+        if (w > 0 && h > 0) {
+          designW = w;
+          designH = h;
+          measured = true;
+          setStageSize(designW, designH);
+          return true;
+        }
+      } catch { /* cross origin or not ready yet */ }
+      return false;
+    }
+
+    // Lock size after first good measure, then only refit scale on viewport changes
+    iframe.addEventListener('load', () => {
+      let attempts = 0;
+      const t = setInterval(() => {
+        attempts++;
+        if (tryInitialMeasure() || attempts > 20) {
+          clearInterval(t);
+          fitScale();
+        }
+      }, 150);
+    });
+
+    // Refit on viewport resize/orientation (but do NOT re-measure inner app)
+    window.addEventListener('resize', fitScale, { passive: true });
+    window.addEventListener('orientationchange', () => setTimeout(fitScale, 80), { passive: true });
+
+    // Prevent pinch/double-tap zoom in wrapper
+    document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+    let lastTouch = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouch <= 300) e.preventDefault();
+      lastTouch = now;
+    }, { passive: false });
+  </script>
+</body>
+</html>
