@@ -1,5 +1,10 @@
 // windsong-controller.js
 (function () {
+  // ---------- small logger ----------
+  const LOG_TAG = '[WindSong]';
+  const log = (...a) => console.log(LOG_TAG, ...a);
+  const warn = (...a) => console.warn(LOG_TAG, ...a);
+
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
   function clampN(v, min, max, def) {
@@ -37,7 +42,7 @@
   // ---------- Minimal styles ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; right:14px; bottom:14px; z-index:9998;
+      position:fixed; right:14px; bottom:14px; z-index:99998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
@@ -46,7 +51,7 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; right:14px; bottom:62px; z-index:9999;
+      position:fixed; right:14px; bottom:62px; z-index:99999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -78,26 +83,21 @@
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
 
-    /* Menu item variant */
-    .ws-menu-item{ cursor:pointer; }
+    /* In-menu item */
+    #windsong-menu-item.ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
-  const panel = buildPanel(
-    settings,
-    onApply,                     // Apply closes panel + broadcasts
-    onTriggerNow,                // Trigger-now for testing
-    onExit                       // X close
-  );
+  const panel = buildPanel(settings, onApply, onTriggerNow, onExit);
   panel.style.display = 'none';
   document.body.appendChild(panel);
 
-  // Try to add a “WindSong” menu item near “About”; fallback to floating ♪
-  const menuInserted = attachMenuRobust(openPanel);
-  if (!menuInserted) {
-    const activator = buildActivator(openPanel);
-    document.body.appendChild(activator);
-  }
+  // ALWAYS show floating activator (reliable entry)
+  const activator = buildActivator(openPanel);
+  document.body.appendChild(activator);
+
+  // ALSO try to add “WindSong” into your site menu (next to About / About!)
+  attachMenuRobust(openPanel);
 
   // Keep panel knobs synced if something else updates them
   window.addEventListener('windsong:update', () => {
@@ -221,29 +221,22 @@
   function onExit()    { panel.style.display = 'none'; }
 
   function onApply(next) {
-    // Save and update shared state
     saveSettings(next);
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Broadcast to environment.js
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-
-    // Inform the background iframe (environment.html) about wind speed
     postWindToEnvironment(next.wind);
-
-    // Close the panel on Apply (as requested)
     onExit();
   }
 
   function onTriggerNow() {
-    // Immediately run a Wind’s Song cycle (for testing)
     window.dispatchEvent(new Event('windsong:trigger'));
   }
 
-  // Fallback floating button
+  // Floating button (always present)
   function buildActivator(openFn) {
     const b = document.createElement('div');
     b.className = 'ws-activator';
@@ -253,65 +246,84 @@
     return b;
   }
 
-  // -------- Robust menu attach (next to "About" if present) --------
+  // -------- Robust menu attach (next to “About” / “About!” if present) --------
+  function normalizeText(t) {
+    return (t || '')
+      .toLowerCase()
+      .replace(/[\s\p{P}\p{S}]+/gu, '') // remove spaces/punctuation/symbols
+      .trim();
+  }
+
   function findMenuCandidate(doc){
     if (!doc) return null;
-    // 1) Obvious containers
+
+    // 1) obvious containers
     const cand = doc.querySelector('[data-menu], nav .menu-list, nav ul, .menu, .site-menu, .main-menu, header nav ul, nav, .wrap .menu');
     if (cand) return cand;
 
-    // 2) Locate the existing “About” item
-    const about = Array.from(doc.querySelectorAll('*'))
-      .find(el => el.textContent && el.textContent.trim().toLowerCase() === 'about');
-    if (about && about.parentElement) return about.parentElement;
+    // 2) locate “About” / “About!” item
+    const nodes = Array.from(doc.querySelectorAll('a, li, div, span, button'));
+    const aboutNode = nodes.find(el => normalizeText(el.textContent) === 'about');
+    if (aboutNode && aboutNode.parentElement) return aboutNode.parentElement;
 
     return null;
   }
 
+  function createMenuItemLike(siblingTag) {
+    const t = (siblingTag || '').toLowerCase();
+    if (t === 'a')   { const a=document.createElement('a'); a.href='#'; return a; }
+    if (t === 'li')  return document.createElement('li');
+    if (t === 'div') return document.createElement('div');
+    // reasonable default
+    return document.createElement('div');
+  }
+
   function insertMenuItem(doc, openFn){
     const menu = findMenuCandidate(doc);
-    if (!menu) return false;
-    if (doc.getElementById('windsong-menu-item')) return true;
+    if (!menu) { log('menu not found'); return false; }
+    if (doc.getElementById('windsong-menu-item')) { log('menu item already present'); return true; }
 
-    // Determine if it's a list or a free container
-    const tag = menu.tagName.toLowerCase();
-    const item = (tag === 'ul' || tag === 'ol') ? doc.createElement('li') : doc.createElement('div');
+    // Try to detect a sibling to match tag
+    const children = Array.from(menu.children);
+    const sibling  = children.find(n => normalizeText(n.textContent) === 'about') || children[0];
+
+    const tagToMatch = sibling ? sibling.tagName : 'DIV';
+    const item = createMenuItemLike(tagToMatch);
     item.id = 'windsong-menu-item';
-    item.className = 'ws-menu-item';
+    item.className = (tagToMatch.toLowerCase() === 'li') ? 'ws-menu-item' : 'ws-menu-item';
     item.style.cssText = 'padding:6px 10px; opacity:.9;';
     item.textContent = 'WindSong';
+
     item.addEventListener('click', (e)=>{ e.preventDefault(); openFn(); });
 
-    // If there's an "About" sibling, try to place next to it
-    const maybeAbout = Array.from(menu.children).find(
-      n => n.textContent && n.textContent.trim().toLowerCase() === 'about'
-    );
-    if (maybeAbout && maybeAbout.nextSibling) {
-      menu.insertBefore(item, maybeAbout.nextSibling);
-    } else {
-      menu.appendChild(item);
+    try {
+      if (sibling && sibling.nextSibling) {
+        menu.insertBefore(item, sibling.nextSibling);
+      } else {
+        menu.appendChild(item);
+      }
+      log('menu item inserted as', `<${tagToMatch.toLowerCase()}>`);
+      return true;
+    } catch (e) {
+      warn('failed to insert menu item', e);
+      return false;
     }
-    return true;
   }
 
   function attachMenuRobust(openFn){
-    let attached = insertMenuItem(document, openFn);
-    if (attached) return true;
+    // immediate attempt
+    if (insertMenuItem(document, openFn)) return true;
 
-    // Retry a few times in case menu renders late
+    // retries (for late-rendered menus)
     let tries = 0;
     const t = setInterval(()=>{
       tries++;
-      attached = insertMenuItem(document, openFn);
-      if (attached || tries > 10) {
+      if (insertMenuItem(document, openFn) || tries > 15) {
         clearInterval(t);
-        if (!attached) {
-          // Will fall back to floating button
-        }
       }
-    }, 200);
+    }, 250);
 
-    // MutationObserver safety net
+    // mutation observer safety net
     const mo = new MutationObserver(() => {
       if (insertMenuItem(document, openFn)) {
         mo.disconnect();
@@ -319,7 +331,7 @@
     });
     mo.observe(document.body, { childList:true, subtree:true });
 
-    return attached;
+    return false;
   }
 
   // ---------- helpers ----------
