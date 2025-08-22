@@ -11,13 +11,12 @@ const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// (Put right above your current window.__WINDS_SONG__ init)
+// Restore knobs from storage (if controller saved them before a reload)
 (function restoreWindsSongFromStorage(){
   try {
     const raw = localStorage.getItem('windsong.settings.v1');
     if (!raw) return;
     const s = JSON.parse(raw);
-    // Establish shared state if controller hasn't yet
     window.__WINDS_SONG__ = window.__WINDS_SONG__ || {};
     if (s.wind   != null) window.__WINDS_SONG__.wind   = Number(s.wind);
     if (s.breath != null) window.__WINDS_SONG__.breath = Number(s.breath);
@@ -25,7 +24,6 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
     if (s.rez    != null) window.__WINDS_SONG__.rez    = Number(s.rez);
   } catch {}
 })();
-
 
 /* Shared state + listeners */
 window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:5, breath:16, elegra:15, rez:1 };
@@ -114,7 +112,8 @@ const revealLayer = (() => {
     padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
     font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
   .env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1;}
-  .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
+  /* Permanent spacing fix: words never collapse even if textContent has no trailing spaces */
+  .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);margin-right:.35em;}
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
 /* Status */
@@ -155,6 +154,7 @@ async function runPoemDrift(){
   }catch(e){ console.error('Poem drift error:', e); poemStatus.set('warn'); }
   finally{ __windsSongRunInProgress=false; }
 }
+
 function spawnDriftingLine(text, driftDurationMs){
   const el = document.createElement('div');
   el.className='env-poem-line'; el.textContent=text;
@@ -187,9 +187,10 @@ async function runRevealSequence(){
   const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
   const lines = CFG.poem.lines.map(line=>{
     const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
-    const words = line.split(' ').map((w,i,arr)=>{
+    const words = line.split(' ').map((w)=>{
       const s=document.createElement('span'); s.className='env-reveal-word';
-      s.textContent = (i<arr.length-1) ? (w+' ') : w; lineEl.appendChild(s); return s;
+      s.textContent = w;                     // ← no trailing spaces; CSS margin provides spacing
+      lineEl.appendChild(s); return s;
     });
     bar.appendChild(lineEl); return { lineEl, words };
   });
@@ -203,23 +204,41 @@ async function runRevealSequence(){
 
   bar.remove();
 }
-async function revealWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+
+async function revealWords(words,totalMs){
+  const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='1'; w.style.transform='translateY(0px)'; await wait(per); } }
+    w.style.opacity='1'; w.style.transform='translateY(0px)';
+    await wait(per);
+  }
+}
 async function crossoverFade(outgoing,incoming,totalMs){
   const steps=Math.max(outgoing.length,incoming.length), per=totalMs/Math.max(1,steps);
   for(let i=0;i<steps;i++){
-    if(i<incoming.length){ const w=incoming[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
-      w.style.opacity='1'; w.style.transform='translateY(0px)'; }
-    if(i<outgoing.length){ const w=outgoing[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
-      w.style.opacity='0'; w.style.transform='translateY(4px)'; }
+    if(i<incoming.length){
+      const w=incoming[i];
+      w.style.transition='opacity 600ms ease, transform 600ms ease';
+      w.style.opacity='1'; w.style.transform='translateY(0px)';
+    }
+    if(i<outgoing.length){
+      const w=outgoing[i];
+      w.style.transition='opacity 600ms ease, transform 600ms ease';
+      w.style.opacity='0'; w.style.transform='translateY(4px)';
+    }
     await wait(per);
-  } }
-async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+  }
+}
+async function fadeWords(words,totalMs){
+  const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
+    w.style.opacity='0'; w.style.transform='translateY(4px)';
+    await wait(per);
+  }
+}
 
 /* Butterfly (Wind applied per flight) */
 function spawnButterfly(){
