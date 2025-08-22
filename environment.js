@@ -15,6 +15,39 @@ const rand  = (a, b) => a + Math.random() * (b - a);   // ← fixed: no stray ')
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// === Wind’s Song hook (safe; no visual change) ===
+(function(){
+  // expose current speed knobs so controller can update them (if you already have these, keep your version)
+  window.__WINDS_SONG__ = window.__WINDS_SONG__ || {
+    windScale: 1.0,  // drift speed multiplier for poem & butterfly (1.0 = baseline)
+    breathSec: 18,   // gap between drifting lines
+    elegraSec: 15    // seconds per reveal phase
+  };
+
+  // accept speed updates (Wind, Breath, Elegra)
+  window.addEventListener('windsong:update', (e) => {
+    const d = e.detail || {};
+    if (typeof d.windScale === 'number')  window.__WINDS_SONG__.windScale = Math.max(0.2, Math.min(3.0, d.windScale));
+    if (typeof d.breathSec === 'number')  window.__WINDS_SONG__.breathSec = Math.max(6, Math.min(60, d.breathSec));
+    if (typeof d.elegraSec === 'number')  window.__WINDS_SONG__.elegraSec = Math.max(6, Math.min(45, d.elegraSec));
+  });
+
+  // allow Rez to trigger extra cycles (no overlap)
+  let poemCycleActive = false;
+  async function startCycleIfIdle() {
+    if (poemCycleActive) return;
+    try {
+      poemCycleActive = true;
+      // your existing function that runs one full drift+reveal cycle:
+      // it should return/resolve when finished (if it's async as we wrote earlier).
+      await (typeof runPoemDrift === 'function' ? runPoemDrift() : Promise.resolve());
+    } finally {
+      poemCycleActive = false;
+    }
+  }
+  window.addEventListener('windsong:trigger', startCycleIfIdle);
+})();
+
 /* --------------------------
    Config (tuned to your ruleset)
 --------------------------- */
