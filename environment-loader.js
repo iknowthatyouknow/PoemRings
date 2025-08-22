@@ -1,7 +1,7 @@
 // environment-loader.js
 
 // --- Mobile routing (no index.html changes) -------------------------
-(function mobileRouter(){
+(function mobileRouter() {
   const params = new URLSearchParams(location.search);
 
   const isMobileUA =
@@ -34,29 +34,48 @@
 
 (function () {
   function injectEnvironment() {
-    if (!document.body || document.getElementById('environment-iframe')) return;
+    if (!document.body) return;
 
     // --- 1) Inject the background iframe (wind + leaves canvas) ---
-    const iframe = document.createElement('iframe');
-    iframe.id = 'environment-iframe';
-    iframe.src = 'environment.html'; // must exist in the same folder
-    iframe.title = 'Decorative background';
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.tabIndex = -1;
+    // IMPORTANT: don't return the whole function if iframe exists; just skip creating it.
+    let iframe = document.getElementById('environment-iframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'environment-iframe';
+      iframe.src = 'environment.html'; // must exist in the same folder
+      iframe.title = 'Decorative background';
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.tabIndex = -1;
 
-    Object.assign(iframe.style, {
-      position: 'fixed',
-      inset: '0',
-      width: '100vw',
-      height: '100vh',
-      border: '0',
-      background: 'transparent',
-      pointerEvents: 'none',
-      zIndex: '0' // sits behind main content
-    });
+      Object.assign(iframe.style, {
+        position: 'fixed',
+        inset: '0',
+        width: '100vw',
+        height: '100vh',
+        border: '0',
+        background: 'transparent',
+        pointerEvents: 'none',
+        zIndex: '0' // sits behind main content
+      });
 
-    // Put it under everything
-    document.body.prepend(iframe);
+      // Put it under everything
+      document.body.prepend(iframe);
+      console.log('[environment-loader] environment iframe injected');
+    } else {
+      // Ensure existing iframe still has the correct attributes/styles (defensive)
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.tabIndex = -1;
+      Object.assign(iframe.style, {
+        position: 'fixed',
+        inset: '0',
+        width: '100vw',
+        height: '100vh',
+        border: '0',
+        background: 'transparent',
+        pointerEvents: 'none',
+        zIndex: '0'
+      });
+    }
 
     // Ensure your main wrapper paints above (no layout change)
     const wrap = document.querySelector('.wrap');
@@ -75,6 +94,10 @@
       s.onload  = () => console.log('[environment-loader] environment.js loaded');
       s.onerror = () => console.warn('[environment-loader] FAILED to load environment.js');
       document.head.appendChild(s);
+    } else {
+      // If already present, make sure it's not a stale failed tag
+      // (no-op here; log to help debug)
+      console.log('[environment-loader] environment.js already present');
     }
 
     // --- 3) Inject windsong-controller.js AFTER environment.js ---
@@ -87,9 +110,9 @@
       c.onload  = () => console.log('[environment-loader] windsong-controller.js loaded');
       c.onerror = () => console.warn('[environment-loader] FAILED to load windsong-controller.js');
       document.head.appendChild(c);
+    } else {
+      console.log('[environment-loader] windsong-controller.js already present');
     }
-
-    console.log('[environment-loader] environment iframe injected');
   }
 
   if (document.readyState === 'loading') {
