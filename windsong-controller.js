@@ -1,111 +1,237 @@
 // windsong-controller.js
-(function(){
-  const READY = () => document.getElementById('menuDropdown');
+(function () {
+  const KEY = 'windsong.settings.v1';
 
-  function addPanel(menu){
-    if (document.getElementById('windsong-panel')) return;
+  // ----- defaults (match your baseline: wind=5 => factor=1.0) -----
+  const defaults = { wind: 5, breath: 16, elegra: 15, rez: 1 };
 
-    // menu item
-    const item = document.createElement('button');
-    item.className = 'menu-item';
-    item.textContent = "Wind’s Song";
-    item.id = 'windsong-item';
-    item.type = 'button';
-    menu.appendChild(item);
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return { ...defaults };
+      const parsed = JSON.parse(raw);
+      return {
+        wind:   Number(parsed.wind)   || defaults.wind,
+        breath: Number(parsed.breath) || defaults.breath,
+        elegra: Number(parsed.elegra) || defaults.elegra,
+        rez:    Number(parsed.rez)    || defaults.rez
+      };
+    } catch { return { ...defaults }; }
+  }
 
-    // panel
+  function saveSettings(s) {
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }
+
+  function dispatchUpdate(s) {
+    // to top doc (environment.js)
+    window.dispatchEvent(new CustomEvent('windsong:update', { detail: s }));
+    // to iframe (environment.html) for wind/leaves speed (wind factor only)
+    const iframe = document.getElementById('environment-iframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(
+        { type: 'WIND_UPDATE', wind: s.wind },
+        '*'
+      );
+    }
+  }
+
+  // ----- build menu item + panel (styling matches your tokens) -----
+  function ensurePanel() {
+    if (document.getElementById('windsong-panel')) return document.getElementById('windsong-panel');
+
     const panel = document.createElement('div');
     panel.id = 'windsong-panel';
-    panel.style.cssText = `
-      position:absolute; right:0; margin-top:8px;
-      background: linear-gradient(180deg, #101522, #0f1522);
-      border:1px solid #21283a; border-radius:10px; padding:10px;
-      box-shadow:0 10px 24px rgba(0,0,0,.35); width: 280px; display:none;
-    `;
-    panel.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
-        <strong style="color:#cdd6e7; font-weight:800;">Wind’s Song Controls</strong>
-        <button id="windsong-close" class="about-close" style="padding:4px 8px">Close</button>
-      </div>
-
-      <label style="display:block;color:#cdd6e7;margin:8px 0 4px;">Wind (1–10, 5 = normal)</label>
-      <input id="ws-wind" type="range" min="1" max="10" step="1" value="5" style="width:100%">
-
-      <label style="display:block;color:#cdd6e7;margin:10px 0 4px;">Breath (seconds between lines)</label>
-      <input id="ws-breath" type="range" min="6" max="30" step="1" value="16" style="width:100%">
-
-      <label style="display:block;color:#cdd6e7;margin:10px 0 4px;">Elegra (seconds per phase at bottom)</label>
-      <input id="ws-elegra" type="range" min="8" max="30" step="1" value="15" style="width:100%">
-
-      <label style="display:block;color:#cdd6e7;margin:10px 0 4px;">Rez (times per hour: 1=once on reload)</label>
-      <input id="ws-rez" type="range" min="1" max="6" step="1" value="1" style="width:100%">
-
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button id="ws-trigger" class="about-close" style="flex:1;">Trigger now</button>
-        <button id="ws-reset" class="about-close" style="flex:1;">Reset to defaults</button>
-      </div>
-    `;
-    menu.appendChild(panel);
-
-    // open/close
-    item.addEventListener('click', () => {
-      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+    Object.assign(panel.style, {
+      position: 'fixed',
+      right: '12px',
+      top: '60px',
+      zIndex: '10001',
+      display: 'none',
+      pointerEvents: 'auto'
     });
-    panel.querySelector('#windsong-close').addEventListener('click', () => panel.style.display='none');
 
-    // controls
-    const windEl   = panel.querySelector('#ws-wind');
-    const breathEl = panel.querySelector('#ws-breath');
-    const elegraEl = panel.querySelector('#ws-elegra');
-    const rezEl    = panel.querySelector('#ws-rez');
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: 'linear-gradient(180deg, #101522, #0f1522)',
+      border: '1px solid #21283a',
+      boxShadow: '0 10px 24px rgba(0,0,0,.35)',
+      borderRadius: '10px',
+      padding: '10px',
+      minWidth: '260px',
+      color: '#e8ecf4',
+      fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans"',
+      letterSpacing: '.2px'
+    });
 
-    function pushUpdate(){
-      // Map wind slider 1..10 where 5 = baseline => factor = wind/5
-      const windVal   = Number(windEl.value || 5);
-      const breathVal = Number(breathEl.value || 16);
-      const elegraVal = Number(elegraEl.value || 15);
-      const rezVal    = Number(rezEl.value || 1);
+    const title = document.createElement('div');
+    title.textContent = 'Wind’s Song';
+    Object.assign(title.style, {
+      fontWeight: '800',
+      color: '#aeb7c8',
+      fontSize: '14px',
+      marginBottom: '6px',
+      textAlign: 'center'
+    });
 
-      // 1) Notify environment.js (top doc)
-      const evt = new CustomEvent('windsong:update', {
-        detail: { wind: windVal, breath: breathVal, elegra: elegraVal, rez: rezVal }
+    const row = (label, control) => {
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        display: 'grid',
+        gridTemplateColumns: '1fr auto',
+        alignItems: 'center',
+        gap: '8px',
+        background: '#0b1120',
+        border: '1px solid #242c3e',
+        borderRadius: '8px',
+        padding: '8px 10px',
+        marginBottom: '8px',
+        color: '#aeb7c8',
+        fontSize: '13px'
       });
-      window.dispatchEvent(evt);
+      const lab = document.createElement('div');
+      lab.textContent = label;
+      wrap.appendChild(lab);
+      wrap.appendChild(control);
+      return wrap;
+    };
 
-      // 2) Notify the iframe (leaves speed)
-      const ifr = document.getElementById('environment-iframe');
-      if (ifr && ifr.contentWindow) {
-        ifr.contentWindow.postMessage({ type:'WIND_UPDATE', wind: windVal }, '*');
-      }
+    // Controls (loaded with persisted values)
+    const settings = loadSettings();
+
+    // Wind 1..10 (5 is baseline)
+    const windInput = document.createElement('input');
+    windInput.type = 'range';
+    windInput.min = '1'; windInput.max = '10'; windInput.step = '1';
+    windInput.value = String(settings.wind);
+    windInput.style.width = '140px';
+    const windWrap = row('Wind (1–10)', windInput);
+
+    // Breath (seconds between drifting lines)
+    const breathInput = document.createElement('input');
+    breathInput.type = 'number';
+    breathInput.min = '1'; breathInput.max = '120'; breathInput.step = '1';
+    breathInput.value = String(settings.breath);
+    Object.assign(breathInput.style, { width: '64px', textAlign: 'right', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
+    const breathWrap = row('Breath (s)', breathInput);
+
+    // Elegra (seconds per pair phase in bottom reveal)
+    const elegraInput = document.createElement('input');
+    elegraInput.type = 'number';
+    elegraInput.min = '2'; elegraInput.max = '60'; elegraInput.step = '1';
+    elegraInput.value = String(settings.elegra);
+    Object.assign(elegraInput.style, { width: '64px', textAlign: 'right', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
+    const elegraWrap = row('Elegra (s)', elegraInput);
+
+    // Rez (1..6) – present; scheduler can be wired later if you say so
+    const rezSelect = document.createElement('select');
+    [1,2,3,4,5,6].forEach(v=>{
+      const opt = document.createElement('option');
+      opt.value = String(v); opt.textContent = String(v);
+      if (v === settings.rez) opt.selected = true;
+      rezSelect.appendChild(opt);
+    });
+    Object.assign(rezSelect.style, { width: '68px', textAlign: 'center', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
+    const rezWrap = row('Rez (1–6)', rezSelect);
+
+    // Buttons
+    const btns = document.createElement('div');
+    Object.assign(btns.style, { display: 'flex', gap: '8px', justifyContent: 'space-between', marginTop: '6px' });
+
+    const applyBtn = document.createElement('button');
+    applyBtn.textContent = 'Apply';
+    styleBtn(applyBtn);
+
+    const triggerBtn = document.createElement('button');
+    triggerBtn.textContent = 'Trigger now';
+    styleBtn(triggerBtn);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    styleBtn(closeBtn);
+
+    btns.appendChild(applyBtn);
+    btns.appendChild(triggerBtn);
+    btns.appendChild(closeBtn);
+
+    card.appendChild(title);
+    card.appendChild(windWrap);
+    card.appendChild(breathWrap);
+    card.appendChild(elegraWrap);
+    card.appendChild(rezWrap);
+    card.appendChild(btns);
+    panel.appendChild(card);
+    document.body.appendChild(panel);
+
+    // events
+    function applyAndClose() {
+      const s = {
+        wind:   clamp(Number(windInput.value)   || defaults.wind, 1, 10),
+        breath: clamp(Number(breathInput.value) || defaults.breath, 1, 120),
+        elegra: clamp(Number(elegraInput.value) || defaults.elegra, 2, 60),
+        rez:    clamp(Number(rezSelect.value)   || defaults.rez, 1, 6)
+      };
+      saveSettings(s);
+      dispatchUpdate(s);
+      // Auto-close after applying
+      panel.style.display = 'none';
     }
 
-    windEl.addEventListener('input', pushUpdate);
-    breathEl.addEventListener('input', pushUpdate);
-    elegraEl.addEventListener('input', pushUpdate);
-    rezEl.addEventListener('input', pushUpdate);
-
-    // buttons
-    panel.querySelector('#ws-trigger').addEventListener('click', () => {
+    applyBtn.addEventListener('click', applyAndClose);
+    triggerBtn.addEventListener('click', () => {
+      // ensure current fields are also saved & dispatched before triggering
+      applyAndClose();
       window.dispatchEvent(new Event('windsong:trigger'));
     });
+    closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
 
-    panel.querySelector('#ws-reset').addEventListener('click', () => {
-      windEl.value = 5; breathEl.value = 16; elegraEl.value = 15; rezEl.value = 1;
-      pushUpdate();
+    return panel;
+  }
+
+  function styleBtn(btn) {
+    Object.assign(btn.style, {
+      background: 'linear-gradient(180deg, #1c2741, #121b2f)',
+      border: '1px solid #2b3854',
+      boxShadow: '0 6px 16px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,0.03)',
+      color: '#e8ecf4',
+      borderRadius: '10px',
+      padding: '8px 12px',
+      cursor: 'pointer',
+      fontWeight: '700',
+      fontSize: '13px'
     });
-
-    // initial push (matches defaults)
-    pushUpdate();
+    btn.onmouseenter = () => { btn.style.background = 'linear-gradient(180deg, #243253, #15203a)'; btn.style.borderColor = '#3a4a6a'; };
+    btn.onmouseleave = () => { btn.style.background = 'linear-gradient(180deg, #1c2741, #121b2f)'; btn.style.borderColor = '#2b3854'; };
   }
 
-  function init(){
-    const menu = READY();
-    if (menu) addPanel(menu);
+  function ensureMenuItem() {
+    const dd = document.getElementById('menuDropdown');
+    if (!dd) return;
+    if (document.getElementById('windsong-menu-item')) return;
+
+    const mi = document.createElement('button');
+    mi.id = 'windsong-menu-item';
+    mi.className = 'menu-item';
+    mi.type = 'button';
+    mi.textContent = 'Wind’s Song';
+    mi.addEventListener('click', () => {
+      const panel = ensurePanel();
+      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+    });
+    dd.appendChild(mi);
   }
 
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, {once:true});
+  // On first load: restore settings & dispatch once so environment starts with them.
+  function bootstrap() {
+    ensureMenuItem();
+    const s = loadSettings();
+    // Immediately tell both top doc and iframe about the saved values
+    dispatchUpdate(s);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
   } else {
-    init();
+    bootstrap();
   }
 })();
