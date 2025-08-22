@@ -1,232 +1,317 @@
 // windsong-controller.js
 (function () {
-  const KEY = 'windsong.settings.v1';
+  // --- keys & defaults (baseline = current site behavior) ---
+  const SS_KEY = 'windsong.settings.v1'; // session only (resets on reload)
+  const DEF = {
+    wind: 5,     // 1..10 (5 = baseline speed)
+    breath: 16,  // seconds between drifting lines
+    elegra: 15,  // seconds per reveal pair phase
+    rez: 1       // 1 = once per refresh; 2..6 = x/60 min schedule (controller handles)
+  };
 
-  // ----- defaults (match your baseline: wind=5 => factor=1.0) -----
-  const defaults = { wind: 5, breath: 16, elegra: 15, rez: 1 };
+  // --- helpers ---
+  const qs  = (sel, root=document) => root.querySelector(sel);
+  const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const loadSS = () => {
+    try { return Object.assign({}, DEF, JSON.parse(sessionStorage.getItem(SS_KEY) || '{}')); }
+    catch { return { ...DEF }; }
+  };
+  const saveSS = (st) => sessionStorage.setItem(SS_KEY, JSON.stringify(st));
 
-  function loadSettings() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return { ...defaults };
-      const parsed = JSON.parse(raw);
-      return {
-        wind:   Number(parsed.wind)   || defaults.wind,
-        breath: Number(parsed.breath) || defaults.breath,
-        elegra: Number(parsed.elegra) || defaults.elegra,
-        rez:    Number(parsed.rez)    || defaults.rez
-      };
-    } catch { return { ...defaults }; }
-  }
+  // --- state (per tab) ---
+  let state = loadSS(); // survives while the tab is open; resets on reload
 
-  function saveSettings(s) {
-    localStorage.setItem(KEY, JSON.stringify(s));
-  }
+  // --- menu hook: add "Wind’s Song" under the existing menu (below About) ---
+  function ensureMenuItem() {
+    const menu = qs('#menuDropdown');
+    if (!menu || qs('#windsongMenuItem')) return;
 
-  function dispatchUpdate(s) {
-    // to top doc (environment.js)
-    window.dispatchEvent(new CustomEvent('windsong:update', { detail: s }));
-    // to iframe (environment.html) for wind/leaves speed (wind factor only)
-    const iframe = document.getElementById('environment-iframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage(
-        { type: 'WIND_UPDATE', wind: s.wind },
-        '*'
-      );
+    const item = document.createElement('button');
+    item.id = 'windsongMenuItem';
+    item.className = 'menu-item';
+    item.setAttribute('role', 'menuitem');
+    item.textContent = 'Wind’s Song';
+    item.addEventListener('click', () => {
+      closeMenu();
+      openPanel();
+    });
+    menu.appendChild(item);
+
+    function closeMenu() {
+      const btn = qs('#menuBtn');
+      menu.classList.remove('open');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
     }
   }
 
-  // ----- build menu item + panel (styling matches your tokens) -----
-  function ensurePanel() {
-    if (document.getElementById('windsong-panel')) return document.getElementById('windsong-panel');
+  // --- panel: styled to match site tokens (uses your CSS variables) ---
+  let panel, overlay;
 
-    const panel = document.createElement('div');
-    panel.id = 'windsong-panel';
+  function buildPanel() {
+    if (panel) return;
+
+    // overlay
+    overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0', background: 'rgba(0,0,0,.6)',
+      backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+      zIndex: '10002', display: 'none'
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closePanel(); });
+    document.body.appendChild(overlay);
+
+    // card
+    panel = document.createElement('div');
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', 'windsongTitle');
     Object.assign(panel.style, {
-      position: 'fixed',
-      right: '12px',
-      top: '60px',
-      zIndex: '10001',
-      display: 'none',
-      pointerEvents: 'auto'
+      background: 'var(--panel, #121826)',
+      border: '1px solid var(--stroke, #263047)',
+      borderRadius: '14px',
+      boxShadow: '0 12px 32px rgba(0,0,0,.4)',
+      width: 'min(92vw, 640px)',
+      margin: '10vh auto 0',
+      padding: '16px 18px',
+      color: 'var(--text, #e8ecf4)',
+      fontFamily: 'inherit'
     });
+    overlay.appendChild(panel);
 
-    const card = document.createElement('div');
-    Object.assign(card.style, {
-      background: 'linear-gradient(180deg, #101522, #0f1522)',
-      border: '1px solid #21283a',
-      boxShadow: '0 10px 24px rgba(0,0,0,.35)',
-      borderRadius: '10px',
-      padding: '10px',
-      minWidth: '260px',
-      color: '#e8ecf4',
-      fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans"',
-      letterSpacing: '.2px'
+    // header
+    const head = document.createElement('div');
+    Object.assign(head.style, {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '8px'
     });
-
-    const title = document.createElement('div');
-    title.textContent = 'Wind’s Song';
+    const title = document.createElement('h3');
+    title.id = 'windsongTitle';
+    title.textContent = 'Wind’s Song Controls';
     Object.assign(title.style, {
-      fontWeight: '800',
-      color: '#aeb7c8',
-      fontSize: '14px',
-      marginBottom: '6px',
-      textAlign: 'center'
+      margin: '0', fontSize: '1rem', color: 'var(--muted, #aeb7c8)', fontWeight: '800', letterSpacing: '.3px'
+    });
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    Object.assign(closeBtn.style, {
+      background: 'var(--btn, #1b2333)',
+      border: '1px solid #2b3449',
+      color: 'var(--text, #e8ecf4)',
+      borderRadius: '10px', padding: '6px 10px', cursor: 'pointer', fontWeight: '700'
+    });
+    closeBtn.addEventListener('click', closePanel);
+    head.appendChild(title);
+    head.appendChild(closeBtn);
+    panel.appendChild(head);
+
+    // grid
+    const grid = document.createElement('div');
+    Object.assign(grid.style, {
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px'
     });
 
-    const row = (label, control) => {
+    // control factory
+    const makeField = (labelTxt, inputEl, hint) => {
       const wrap = document.createElement('div');
       Object.assign(wrap.style, {
-        display: 'grid',
-        gridTemplateColumns: '1fr auto',
-        alignItems: 'center',
-        gap: '8px',
-        background: '#0b1120',
-        border: '1px solid #242c3e',
-        borderRadius: '8px',
-        padding: '8px 10px',
-        marginBottom: '8px',
-        color: '#aeb7c8',
-        fontSize: '13px'
+        background: 'linear-gradient(180deg, var(--panel, #121826), var(--panel-2, #141b2a))',
+        border: '1px solid #21283a', borderRadius: '10px', padding: '10px 12px'
       });
       const lab = document.createElement('div');
-      lab.textContent = label;
+      lab.textContent = labelTxt;
+      Object.assign(lab.style, { fontWeight: '700', marginBottom: '6px', color: 'var(--muted, #aeb7c8)' });
+      const hintEl = document.createElement('div');
+      hintEl.textContent = hint || '';
+      Object.assign(hintEl.style, { fontSize: '12px', color: 'var(--muted, #aeb7c8)', opacity: .85, marginTop: '6px' });
+      inputEl.style.width = '100%';
+      inputEl.style.marginTop = '6px';
       wrap.appendChild(lab);
-      wrap.appendChild(control);
+      wrap.appendChild(inputEl);
+      if (hint) wrap.appendChild(hintEl);
       return wrap;
     };
 
-    // Controls (loaded with persisted values)
-    const settings = loadSettings();
-
-    // Wind 1..10 (5 is baseline)
+    // WIND (1..10; 5 baseline)
     const windInput = document.createElement('input');
-    windInput.type = 'range';
-    windInput.min = '1'; windInput.max = '10'; windInput.step = '1';
-    windInput.value = String(settings.wind);
-    windInput.style.width = '140px';
-    const windWrap = row('Wind (1–10)', windInput);
-
-    // Breath (seconds between drifting lines)
+    windInput.type = 'range'; windInput.min = '1'; windInput.max = '10'; windInput.step = '1';
+    // BREATH (6..30 seconds recommended; default 16)
     const breathInput = document.createElement('input');
-    breathInput.type = 'number';
-    breathInput.min = '1'; breathInput.max = '120'; breathInput.step = '1';
-    breathInput.value = String(settings.breath);
-    Object.assign(breathInput.style, { width: '64px', textAlign: 'right', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
-    const breathWrap = row('Breath (s)', breathInput);
-
-    // Elegra (seconds per pair phase in bottom reveal)
+    breathInput.type = 'range'; breathInput.min = '6'; breathInput.max = '30'; breathInput.step = '1';
+    // ELEGRA (8..30 seconds recommended; default 15)
     const elegraInput = document.createElement('input');
-    elegraInput.type = 'number';
-    elegraInput.min = '2'; elegraInput.max = '60'; elegraInput.step = '1';
-    elegraInput.value = String(settings.elegra);
-    Object.assign(elegraInput.style, { width: '64px', textAlign: 'right', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
-    const elegraWrap = row('Elegra (s)', elegraInput);
-
-    // Rez (1..6) – present; scheduler can be wired later if you say so
+    elegraInput.type = 'range'; elegraInput.min = '8'; elegraInput.max = '30'; elegraInput.step = '1';
+    // REZ (1..6 select)
     const rezSelect = document.createElement('select');
-    [1,2,3,4,5,6].forEach(v=>{
+    ['1','2','3','4','5','6'].forEach(v => {
       const opt = document.createElement('option');
-      opt.value = String(v); opt.textContent = String(v);
-      if (v === settings.rez) opt.selected = true;
+      opt.value = v; opt.textContent = v;
       rezSelect.appendChild(opt);
     });
-    Object.assign(rezSelect.style, { width: '68px', textAlign: 'center', color: '#e8ecf4', background: '#0b1120', border: '1px solid #242c3e', borderRadius: '6px', padding: '4px 6px' });
-    const rezWrap = row('Rez (1–6)', rezSelect);
 
-    // Buttons
-    const btns = document.createElement('div');
-    Object.assign(btns.style, { display: 'flex', gap: '8px', justifyContent: 'space-between', marginTop: '6px' });
+    // Readouts
+    const windVal = document.createElement('div');
+    const breathVal = document.createElement('div');
+    const elegraVal = document.createElement('div');
+
+    [windVal, breathVal, elegraVal].forEach(el => Object.assign(el.style, {
+      marginTop: '4px', fontSize: '12px', color: 'var(--muted, #aeb7c8)'
+    }));
+
+    function syncInputsFromState() {
+      windInput.value = String(state.wind);
+      breathInput.value = String(state.breath);
+      elegraInput.value = String(state.elegra);
+      rezSelect.value = String(state.rez);
+      windVal.textContent   = `Speed: ${state.wind} (5 = baseline)`;
+      breathVal.textContent = `Between lines: ${state.breath}s`;
+      elegraVal.textContent = `Reveal pacing: ${state.elegra}s`;
+    }
+
+    // bind oninput (live readouts only; apply happens on button)
+    windInput.addEventListener('input', () => { windVal.textContent = `Speed: ${windInput.value} (5 = baseline)`; });
+    breathInput.addEventListener('input', () => { breathVal.textContent = `Between lines: ${breathInput.value}s`; });
+    elegraInput.addEventListener('input', () => { elegraVal.textContent = `Reveal pacing: ${elegraInput.value}s`; });
+
+    // fields
+    grid.appendChild(makeField('Wind', windInput,
+      'Controls leaves, drifting lines, and butterfly speed (1–10; 5 = baseline).'));
+    grid.appendChild(windVal);
+
+    grid.appendChild(makeField('Breath', breathInput,
+      'Seconds between drifting poem lines (uniform).'));
+    grid.appendChild(breathVal);
+
+    grid.appendChild(makeField('Elegra', elegraInput,
+      'Seconds per reveal pair (bottom fade-in/out pacing).'));
+    grid.appendChild(elegraVal);
+
+    grid.appendChild(makeField('Rez', rezSelect,
+      'How often Wind’s Song runs within one hour: x/60 minutes; 1 = once per refresh.'));
+    // empty cell to keep grid even
+    const spacer = document.createElement('div'); spacer.style.minHeight = '1px';
+    grid.appendChild(spacer);
+
+    panel.appendChild(grid);
+
+    // footer buttons
+    const foot = document.createElement('div');
+    Object.assign(foot.style, { display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '12px' });
 
     const applyBtn = document.createElement('button');
     applyBtn.textContent = 'Apply';
     styleBtn(applyBtn);
-
-    const triggerBtn = document.createElement('button');
-    triggerBtn.textContent = 'Trigger now';
-    styleBtn(triggerBtn);
-
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = 'Close';
-    styleBtn(closeBtn);
-
-    btns.appendChild(applyBtn);
-    btns.appendChild(triggerBtn);
-    btns.appendChild(closeBtn);
-
-    card.appendChild(title);
-    card.appendChild(windWrap);
-    card.appendChild(breathWrap);
-    card.appendChild(elegraWrap);
-    card.appendChild(rezWrap);
-    card.appendChild(btns);
-    panel.appendChild(card);
-    document.body.appendChild(panel);
-
-    // events
-    function applyAndClose() {
-      const s = {
-        wind:   clamp(Number(windInput.value)   || defaults.wind, 1, 10),
-        breath: clamp(Number(breathInput.value) || defaults.breath, 1, 120),
-        elegra: clamp(Number(elegraInput.value) || defaults.elegra, 2, 60),
-        rez:    clamp(Number(rezSelect.value)   || defaults.rez, 1, 6)
+    applyBtn.addEventListener('click', () => {
+      // update state
+      state = {
+        wind: clamp(parseInt(windInput.value, 10) || DEF.wind, 1, 10),
+        breath: clamp(parseInt(breathInput.value, 10) || DEF.breath, 6, 60),
+        elegra: clamp(parseInt(elegraInput.value, 10) || DEF.elegra, 6, 60),
+        rez: clamp(parseInt(rezSelect.value, 10) || DEF.rez, 1, 6)
       };
-      saveSettings(s);
-      dispatchUpdate(s);
-      // Auto-close after applying
-      panel.style.display = 'none';
+      saveSS(state);
+      dispatchSettings(state);
+      scheduleRez(state);
+      closePanel(); // auto-close on apply
+    });
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset (baseline)';
+    styleBtn(resetBtn, true);
+    resetBtn.addEventListener('click', () => {
+      state = { ...DEF };
+      saveSS(state);
+      syncInputsFromState();
+      dispatchSettings(state);
+      scheduleRez(state);
+      closePanel();
+    });
+
+    foot.appendChild(resetBtn);
+    foot.appendChild(applyBtn);
+    panel.appendChild(foot);
+
+    // prime values
+    syncInputsFromState();
+
+    function styleBtn(b, ghost=false) {
+      Object.assign(b.style, {
+        background: ghost ? 'var(--btn, #1b2333)' : 'linear-gradient(180deg, var(--pbtn-bg1, #1c2741), var(--pbtn-bg2, #121b2f))',
+        border: '1px solid var(--pbtn-border, #2b3854)',
+        color: 'var(--text, #e8ecf4)',
+        borderRadius: '12px',
+        padding: '10px 14px',
+        fontWeight: '700',
+        cursor: 'pointer',
+        boxShadow: 'var(--pbtn-shadow, 0 10px 24px rgba(0,0,0,.35))'
+      });
     }
-
-    applyBtn.addEventListener('click', applyAndClose);
-    triggerBtn.addEventListener('click', () => {
-      // ensure current fields are also saved & dispatched before triggering
-      applyAndClose();
-      window.dispatchEvent(new Event('windsong:trigger'));
-    });
-    closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
-
-    return panel;
   }
 
-  function styleBtn(btn) {
-    Object.assign(btn.style, {
-      background: 'linear-gradient(180deg, #1c2741, #121b2f)',
-      border: '1px solid #2b3854',
-      boxShadow: '0 6px 16px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,0.03)',
-      color: '#e8ecf4',
-      borderRadius: '10px',
-      padding: '8px 12px',
-      cursor: 'pointer',
-      fontWeight: '700',
-      fontSize: '13px'
-    });
-    btn.onmouseenter = () => { btn.style.background = 'linear-gradient(180deg, #243253, #15203a)'; btn.style.borderColor = '#3a4a6a'; };
-    btn.onmouseleave = () => { btn.style.background = 'linear-gradient(180deg, #1c2741, #121b2f)'; btn.style.borderColor = '#2b3854'; };
+  function openPanel() {
+    buildPanel();
+    // refresh inputs from current session state each time you open
+    if (panel) {
+      // re-sync values so reopening shows last selections
+      const current = loadSS();
+      state = current;
+      // find inputs again and sync
+      const ranges = qsa('input[type="range"]', panel);
+      const select = qs('select', panel);
+      const [windInput, breathInput, elegraInput] = ranges;
+      windInput.value = String(state.wind);
+      breathInput.value = String(state.breath);
+      elegraInput.value = String(state.elegra);
+      select.value = String(state.rez);
+      // update readouts
+      panel.querySelectorAll('div').forEach(d => {
+        // update known readouts by text pattern
+        if (d.textContent && d.textContent.startsWith('Speed:'))   d.textContent = `Speed: ${state.wind} (5 = baseline)`;
+        if (d.textContent && d.textContent.startsWith('Between lines:')) d.textContent = `Between lines: ${state.breath}s`;
+        if (d.textContent && d.textContent.startsWith('Reveal pacing:')) d.textContent = `Reveal pacing: ${state.elegra}s`;
+      });
+    }
+    overlay.style.display = 'flex';
+  }
+  function closePanel() {
+    if (overlay) overlay.style.display = 'none';
   }
 
-  function ensureMenuItem() {
-    const dd = document.getElementById('menuDropdown');
-    if (!dd) return;
-    if (document.getElementById('windsong-menu-item')) return;
-
-    const mi = document.createElement('button');
-    mi.id = 'windsong-menu-item';
-    mi.className = 'menu-item';
-    mi.type = 'button';
-    mi.textContent = 'Wind’s Song';
-    mi.addEventListener('click', () => {
-      const panel = ensurePanel();
-      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
-    });
-    dd.appendChild(mi);
+  // --- dispatch to top document (environment.js) + iframe (environment.html) ---
+  function dispatchSettings(st) {
+    // 1) environment.js (drift/butterfly/reveal)
+    window.dispatchEvent(new CustomEvent('windsong:update', {
+      detail: { wind: st.wind, breath: st.breath, elegra: st.elegra, rez: st.rez }
+    }));
+    // 2) environment.html (wind/leaves) via postMessage to iframe
+    const ifr = qs('#environment-iframe');
+    if (ifr && ifr.contentWindow) {
+      ifr.contentWindow.postMessage({ type: 'WIND_UPDATE', wind: st.wind }, '*');
+    }
   }
 
-  // On first load: restore settings & dispatch once so environment starts with them.
+  // --- Rez scheduling (per-hour cadence inside this tab; resets on reload) ---
+  let rezTimer = null;
+  function scheduleRez(st) {
+    if (rezTimer) { clearInterval(rezTimer); rezTimer = null; }
+
+    // always run once after settings change (if rez === 1, it will only run once)
+    window.dispatchEvent(new Event('windsong:trigger'));
+
+    const n = clamp(st.rez|0, 1, 6);
+    if (n > 1) {
+      const minutes = 60 / n;
+      const ms = minutes * 60 * 1000;
+      rezTimer = setInterval(() => {
+        window.dispatchEvent(new Event('windsong:trigger'));
+      }, ms);
+    }
+  }
+
+  // --- bootstrap on load: add menu item, send current (session) settings, start Rez ---
   function bootstrap() {
     ensureMenuItem();
-    const s = loadSettings();
-    // Immediately tell both top doc and iframe about the saved values
-    dispatchUpdate(s);
+    // push current state to both listeners immediately
+    dispatchSettings(state);
+    scheduleRez(state);
   }
 
   if (document.readyState === 'loading') {
