@@ -11,6 +11,22 @@ const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// (Put right above your current window.__WINDS_SONG__ init)
+(function restoreWindsSongFromStorage(){
+  try {
+    const raw = localStorage.getItem('windsong.settings.v1');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    // Establish shared state if controller hasn't yet
+    window.__WINDS_SONG__ = window.__WINDS_SONG__ || {};
+    if (s.wind   != null) window.__WINDS_SONG__.wind   = Number(s.wind);
+    if (s.breath != null) window.__WINDS_SONG__.breath = Number(s.breath);
+    if (s.elegra != null) window.__WINDS_SONG__.elegra = Number(s.elegra);
+    if (s.rez    != null) window.__WINDS_SONG__.rez    = Number(s.rez);
+  } catch {}
+})();
+
+
 /* Shared state + listeners */
 window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:5, breath:16, elegra:15, rez:1 };
 window.addEventListener("windsong:update", (e) => {
