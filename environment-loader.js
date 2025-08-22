@@ -1,4 +1,37 @@
 // environment-loader.js
+
+// --- Mobile routing (no index.html changes) -------------------------
+(function mobileRouter(){
+  const params = new URLSearchParams(location.search);
+
+  const isMobileUA =
+    /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/i
+      .test(navigator.userAgent);
+  const isTouchNarrow =
+    (('ontouchstart' in window) || navigator.maxTouchPoints > 0) && window.innerWidth < 1024;
+
+  const forceMobile  = params.has('mobile');
+  const forceDesktop = params.has('desktop');
+  const preferMobile = forceMobile || (!forceDesktop && (isMobileUA || isTouchNarrow));
+
+  const path = location.pathname.toLowerCase();
+  const onMobilePage  = path.endsWith('/mobile.html');
+  const onIndexOrRoot = path.endsWith('/') || path.endsWith('/index.html');
+
+  // Keep existing params when bouncing (except our overrides)
+  const kept = [...params.entries()].filter(([k]) => (k !== 'mobile' && k !== 'desktop'));
+  const qs   = kept.length ? ('?' + new URLSearchParams(kept).toString()) : '';
+
+  if (preferMobile && !onMobilePage) {
+    location.replace('mobile.html' + qs);
+    return;
+  }
+  if (!preferMobile && onMobilePage) {
+    location.replace('index.html' + qs);
+    return;
+  }
+})();
+
 (function () {
   function injectEnvironment() {
     if (!document.body || document.getElementById('environment-iframe')) return;
@@ -29,7 +62,7 @@
     const wrap = document.querySelector('.wrap');
     if (wrap) {
       if (!wrap.style.position) wrap.style.position = 'relative';
-      if (!wrap.style.zIndex) wrap.style.zIndex = '1';
+      if (!wrap.style.zIndex)   wrap.style.zIndex = '1';
     }
 
     // --- 2) Inject environment.js into the TOP document (poem + butterfly) ---
@@ -39,7 +72,7 @@
       s.defer = true;                    // do not block
       s.async = false;                   // preserve order relative to this loader
       s.dataset.envJs = '1';
-      s.onload = () => console.log('[environment-loader] environment.js loaded');
+      s.onload  = () => console.log('[environment-loader] environment.js loaded');
       s.onerror = () => console.warn('[environment-loader] FAILED to load environment.js');
       document.head.appendChild(s);
     }
@@ -51,10 +84,10 @@
       c.defer = true;
       c.async = false;
       c.dataset.windsongCtl = '1';
-      c.onload = () => console.log('[environment-loader] windsong-controller.js loaded');
+      c.onload  = () => console.log('[environment-loader] windsong-controller.js loaded');
       c.onerror = () => console.warn('[environment-loader] FAILED to load windsong-controller.js');
       document.head.appendChild(c);
-}
+    }
 
     console.log('[environment-loader] environment iframe injected');
   }
