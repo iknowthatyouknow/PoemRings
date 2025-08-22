@@ -28,17 +28,18 @@
 
   // === WIND multiplier (5 = baseline) ===
   let WIND_SLIDER = 5;                  // receives 1..10
-  let WIND_FACTOR = WIND_SLIDER / 5;    // 1.0 at baseline
+ // Default factor = 1.0 (baseline)
+  let WIND_FACTOR = 1.0;
+  
+  // Listen for wind changes from the top document
   window.addEventListener('message', (ev) => {
-    const d = ev.data || {};
-    if (d && d.type === 'WIND_UPDATE') {
-      const v = Number(d.wind);
-      if (!Number.isNaN(v)) {
-        WIND_SLIDER = Math.min(10, Math.max(1, v));
-        WIND_FACTOR = WIND_SLIDER / 5;
-      }
+    const msg = ev.data || {};
+    if (msg && msg.type === 'WIND_UPDATE') {
+      const wind = Number(msg.wind) || 5;         // 1..10
+      WIND_FACTOR = Math.max(0.1, wind / 5);      // 5 => 1.0 (baseline)
     }
   });
+
 
   // Gentle wind lines + floating leaves (very subtle)
   const STREAMS = 16, LEAVES = 48;
