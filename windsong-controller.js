@@ -8,14 +8,12 @@
       return {
         wind:   clampN(s.wind,   1, 10, 5),
         breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI consistency; not used for reveal timing anymore
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI; reveal timing is fixed in environment.js
         rez:    clampN(s.rez,    1,   6,  1),
       };
     } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
-  function saveSettings(s) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(s));
-  }
+  function saveSettings(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
   function clampN(v, min, max, def) {
     v = Number(v);
     return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
@@ -32,24 +30,28 @@
   // Inform environment.html about current wind multiplier (so leaves speed match)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles ----------
+  // ---------- Styles (unchanged visuals) ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; right:14px; bottom:14px; z-index:9998;
+      position:fixed; z-index:9998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
       box-shadow:0 6px 18px rgba(0,0,0,.25);
+      /* default fallback position; will be overridden when anchored */
+      right:14px; bottom:14px;
     }
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; right:14px; bottom:62px; z-index:9999;
+      position:fixed; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
       padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
+      /* open near the activator by default */
+      right:14px; bottom:62px; display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
@@ -75,7 +77,6 @@
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
 
-    /* Optional: small menu item if a site menu exists */
     .ws-menu-item{ cursor:pointer; }
   `);
 
@@ -83,19 +84,22 @@
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // Try to add an item “Wind Song” under an existing nav; fallback to floating activator
-  const menuInserted = tryAttachMenuItem(openPanel);
-  if (!menuInserted) {
-    const activator = buildActivator(openPanel);
-    document.body.appendChild(activator);
-  }
+  const activator = buildActivator(openPanel);
+  document.body.appendChild(activator);
+
+  // Try to locate the three‑dot menu trigger and pin beneath it
+  const anchor = findThreeDotAnchor();
+  if (anchor) {
+    // place and keep synced
+    positionActivatorUnderAnchor(activator, anchor, 8);
+    window.addEventListener('resize', () => positionActivatorUnderAnchor(activator, anchor, 8));
+    window.addEventListener('scroll', () => positionActivatorUnderAnchor(activator, anchor, 8), { passive:true });
+  } // else: fallback stays bottom-right via CSS
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
-    el.style.display = 'none';
-
     el.innerHTML = `
       <div class="ws-head">
         <div class="ws-title">
@@ -142,7 +146,7 @@
       </div>
 
       <div class="ws-help">
-        Wind = global speed. Breath = butterfly motion. Elegra is kept for now (visual) but final reveal is fixed.
+        Wind = global speed. Breath = butterfly motion. Elegra (kept visually) — final reveal uses fixed timing.
         Rez = times per hour (1 = once per refresh).
       </div>
 
@@ -188,7 +192,7 @@
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
         breath: clampN(breath.value, 6, 30, 16),
-        elegra: clampN(elegra.value, 8, 30, 15), // not used by reveal timing anymore
+        elegra: clampN(elegra.value, 8, 30, 15), // not used for reveal pacing now
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
@@ -201,22 +205,14 @@
   function onExit()    { document.querySelector('.ws-panel').style.display = 'none'; }
 
   function onApply(next) {
-    // Save for this session, restore on reopen
     saveSettings(next);
-
-    // Update shared state for environment.js
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Broadcast change
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-
-    // Inform the background iframe (environment.html) about wind speed as well
     postWindToEnvironment(next.wind);
-
-    // Close panel
     onExit();
   }
 
@@ -229,8 +225,44 @@
     return b;
   }
 
+  // ---- Anchor under the three‑dot menu (not inside it) ----
+  function findThreeDotAnchor() {
+    // Try several likely selectors; harmless if not present
+    const candidates = [
+      '.wrap .menu button', '.wrap .menu .dots', '.wrap .menu .icon',
+      'nav .menu button', 'nav .dots', 'nav [aria-label*="more" i]',
+      '[aria-label="More"]', '[aria-label*="menu" i]', '[data-menu-toggle]',
+      '.three-dots', '.kebab', '#menu button', '.menu button'
+    ];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function positionActivatorUnderAnchor(activatorEl, anchorEl, offsetPx) {
+    const r = anchorEl.getBoundingClientRect();
+    const top  = Math.round(r.bottom + offsetPx);
+    // Prefer aligning left edges; clamp to viewport with a small gutter
+    const left = Math.round(Math.min(
+      Math.max(r.left, 8),
+      window.innerWidth - activatorEl.offsetWidth - 8
+    ));
+    Object.assign(activatorEl.style, {
+      top:  `${top}px`,
+      left: `${left}px`,
+      right: 'auto',
+      bottom: 'auto'
+    });
+  }
+
+  // ---------- Menu item (optional) ----------
+  // We keep this OFF now to avoid confusion—activator is separate under the three dots.
+  // If you ever want a text entry in the menu as well, re-enable this:
+  // tryAttachMenuItem(openPanel);
+
   function tryAttachMenuItem(openFn) {
-    // Try common menu containers; if not found, return false to use floating button
     const menu = document.querySelector('.menu, nav, .nav, #menu, .site-menu, .wrap .menu');
     if (!menu) return false;
     const item = document.createElement('div');
@@ -242,8 +274,8 @@
     return true;
   }
 
+  // ---------- Messaging ----------
   function postWindToEnvironment(windVal) {
-    // environment.html iframe id is set by environment-loader.js
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
     const wind = Number(windVal) || 5;
@@ -256,7 +288,7 @@
     document.head.appendChild(tag);
   }
 
-  // ---------- SVG icons ----------
+  // ---------- SVG icons (unchanged) ----------
   function svgWind() {
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -267,7 +299,6 @@
       </svg>`;
   }
   function svgBreath() {
-    // "poem ↔ poem" glyph: two blocks with a bidirectional arrow
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="4" width="18" height="16" rx="2" />
@@ -278,7 +309,6 @@
       </svg>`;
   }
   function svgElegra() {
-    // rhythm line (kept visually; no longer controls reveal speed)
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
