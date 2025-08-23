@@ -1,26 +1,20 @@
-<script>
 // windsong-controller.js
 (function () {
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
+  function clampN(v, min, max, def) { v = Number(v); return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def; }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
         wind:   clampN(s.wind,   1, 10, 5),
-        breath: clampN(s.breath, 6,  30, 16), // now: butterfly oscillation
-        elegra: clampN(s.elegra, 8,  30, 15), // UI kept; reveal speed fixed in env.js
+        breath: clampN(s.breath, 6,  30, 16),
+        elegra: clampN(s.elegra, 8,  30, 15),
         rez:    clampN(s.rez,    1,   6,  1),
       };
     } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
-  function saveSettings(s) {
-    localStorage.setItem(STORE_KEY, JSON.stringify(s));
-  }
-  function clampN(v, min, max, def) {
-    v = Number(v);
-    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
-  }
+  function saveSettings(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
@@ -30,13 +24,13 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Inform environment.html about current wind multiplier (so leaves speed match)
+  // keep environment.html in sync for leaf/wind speed
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles ----------
+  // ---------- Minimal styles (unchanged visuals) ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; z-index:9998;
+      position:fixed; right:14px; top:64px; z-index:9998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
@@ -45,14 +39,12 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; z-index:9999;
+      position:fixed; right:14px; top:112px; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
       padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
-      right:14px; /* below About area; top set dynamically */
-      display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
@@ -77,59 +69,32 @@
     }
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
-    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // Try to place activator a few px below the "About" three-dot button; fallback to bottom-right
   const activator = buildActivator(openPanel);
-  positionActivatorNearAbout(activator);
   document.body.appendChild(activator);
 
-  // ---------- Rez scheduler (top-of-hour aligned) ----------
-  let rezTimerInitial = null;
-  let rezInterval = null;
-  let suspendedBySpecialPoem = false;
+  // ---------- Special-poem coordination with Rez ----------
+  let specialActive = false;
+  window.addEventListener('special-poem:begin', () => { specialActive = true; });
+  window.addEventListener('special-poem:end',   () => { specialActive = false; });
 
-  function clearRezSchedule(){
-    if (rezTimerInitial) { clearTimeout(rezTimerInitial); rezTimerInitial = null; }
-    if (rezInterval) { clearInterval(rezInterval); rezInterval = null; }
-  }
-  function scheduleRez(rez){
-    clearRezSchedule();
-    if (rez <= 1) return; // repeats disabled; environment does the once-per-refresh
-    // wait until top of next hour, then fire rez times/hour evenly
-    const now = new Date();
-    const nextHour = new Date(now);
-    nextHour.setMinutes(0,0,0);
-    if (now >= nextHour) nextHour.setHours(nextHour.getHours()+1);
-
-    rezTimerInitial = setTimeout(()=>{
-      if (!suspendedBySpecialPoem) dispatchTrigger();
-      const periodMs = Math.floor(60*60*1000 / rez);
-      rezInterval = setInterval(()=>{
-        if (!suspendedBySpecialPoem) dispatchTrigger();
-      }, periodMs);
-    }, nextHour.getTime() - now.getTime());
-  }
-  function dispatchTrigger(){
+  // Rez scheduler aligned to top-of-hour minutes grid, but suppressed during special
+  startRezScheduler(() => {
+    if (specialActive) return;                 // defer if special is running
     window.dispatchEvent(new Event('windsong:trigger'));
-  }
-
-  // suspend/resume for special poem
-  window.addEventListener('special-poem:begin', ()=>{ suspendedBySpecialPoem = true; });
-  window.addEventListener('special-poem:end', ()=>{ suspendedBySpecialPoem = false; });
-
-  // kick scheduler with current rez
-  scheduleRez(settings.rez);
+  });
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
+    el.style.display = 'none';
+
     el.innerHTML = `
       <div class="ws-head">
         <div class="ws-title">
@@ -176,8 +141,8 @@
       </div>
 
       <div class="ws-help">
-        Wind = speed of all motion. Breath = butterfly oscillation. Elegra kept (reveal is fixed slow).
-        Rez = repeats per hour (1 = once per refresh only).
+        Breath = seconds between drifting lines. Elegra = reveal pacing (seconds).
+        Rez = times per hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
@@ -214,10 +179,8 @@
     elegra.addEventListener('input', syncVals);
     rez.addEventListener('input', syncVals);
 
-    // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply button (saves, dispatches, posts wind to iframe, closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
@@ -231,41 +194,20 @@
     return el;
   }
 
-  function openPanel() {
-    const pnl = document.querySelector('.ws-panel');
-    pnl.style.display = 'block';
-    // place panel a little below the activator
-    const activ = document.querySelector('.ws-activator');
-    if (activ) {
-      pnl.style.top = (activ.getBoundingClientRect().bottom + 10) + 'px';
-    } else {
-      pnl.style.bottom = '62px';
-    }
-  }
-  function onExit() {
-    document.querySelector('.ws-panel').style.display = 'none';
-  }
+  function openPanel() { document.querySelector('.ws-panel').style.display = 'block'; }
+  function onExit()    { document.querySelector('.ws-panel').style.display = 'none'; }
 
   function onApply(next) {
-    // Save
     saveSettings(next);
 
-    // Update shared state
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Dispatch app-wide event (environment.js listens)
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-
-    // Inform the background iframe (environment.html) about wind speed as well
     postWindToEnvironment(next.wind);
 
-    // Re-schedule Rez
-    scheduleRez(next.rez);
-
-    // Close panel
     onExit();
   }
 
@@ -278,24 +220,34 @@
     return b;
   }
 
-  function positionActivatorNearAbout(el){
-    // try to find an About button (heuristics)
-    const candidates = Array.from(document.querySelectorAll('*'))
-      .filter(n=>{
-        const txt = (n.textContent || '').trim().toLowerCase();
-        const aria = (n.getAttribute && (n.getAttribute('aria-label')||'')).toLowerCase();
-        return txt === 'about' || aria === 'about' || n.id === 'about' || n.className.toLowerCase().includes('about');
-      });
+  function startRezScheduler(triggerFn){
+    // Clear any existing
+    if (window.__WS_REZ_INTERVAL__) clearInterval(window.__WS_REZ_INTERVAL__);
+    if (window.__WS_REZ_TIMEOUT__)  clearTimeout(window.__WS_REZ_TIMEOUT__);
 
-    if (candidates.length){
-      const a = candidates[0].getBoundingClientRect();
-      el.style.left = (a.left) + 'px';
-      el.style.top  = (a.bottom + 12) + 'px'; // a few spaces below
-    } else {
-      // fallback bottom-right
-      el.style.right = '14px';
-      el.style.bottom = '14px';
+    const rez = Number(window.__WINDS_SONG__.rez) || 1;
+    if (rez <= 1) return; // once per refresh, no hourly schedule
+
+    // Align to top-of-hour grid: every (60/rez) minutes at minute marks
+    const intervalMin = Math.max(1, Math.floor(60/rez));
+    function msToNextTick(){
+      const now = new Date();
+      const minutes = now.getMinutes();
+      const nextMinuteMark = Math.ceil((minutes+0.0001)/intervalMin)*intervalMin;
+      const hour = now.getHours();
+      const next = new Date(now);
+      if (nextMinuteMark >= 60) { next.setHours(hour+1, 0, 0, 0); }
+      else                      { next.setMinutes(nextMinuteMark, 0, 0); }
+      return next - now;
     }
+
+    function schedule(){
+      window.__WS_REZ_TIMEOUT__ = setTimeout(()=>{
+        triggerFn(); // will be ignored if specialActive in our guard above
+        window.__WS_REZ_INTERVAL__ = setInterval(triggerFn, intervalMin*60*1000);
+      }, msToNextTick());
+    }
+    schedule();
   }
 
   function postWindToEnvironment(windVal) {
@@ -305,11 +257,7 @@
     iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
-  function injectCSS(text) {
-    const tag = document.createElement('style');
-    tag.textContent = text;
-    document.head.appendChild(tag);
-  }
+  function injectCSS(text) { const tag = document.createElement('style'); tag.textContent = text; document.head.appendChild(tag); }
 
   // ---------- SVG icons ----------
   function svgWind() {
@@ -351,4 +299,3 @@
       </svg>`;
   }
 })();
-</script>
