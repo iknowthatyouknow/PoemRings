@@ -1,9 +1,10 @@
 /* =========================================================================
    environment.js (drop-in)
    - No index.html changes; visuals unchanged
-   - Reads Wind/Breath/Elegra/Rez live (from windsong-controller.js) when present
+   - Reads Wind/Breath/Elegra live so adjustments take effect mid-session
    - 5 on the Wind slider = current baseline speed
-   - Butterfly interaction: nearby butterflies briefly “circle dance” at random
+   - FIX: bottom reveal words spaced via CSS margins (no trimmed spaces)
+   - FIX: bottom reveal bar fades out smoothly before removal
    ======================================================================== */
 
 /* Utils */
@@ -12,7 +13,7 @@ const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-/* Restore controller values (if previously saved) */
+/* Restore settings early (so first cycle uses saved values) */
 (function restoreWindsSongFromStorage(){
   try {
     const raw = localStorage.getItem('windsong.settings.v1');
@@ -63,26 +64,12 @@ const CFG = {
     baseTravelMsMin: 18_000, baseTravelMsMax: 26_000,
     sizeMin: 20, sizeMax: 28,
     tint: {
-      waiting:'rgba(255, 230, 120, 0.50)',   // yellow
-      playing:'rgba(120, 200, 255, 0.55)',   // cyan/blue
-      done:   'rgba(140, 235, 170, 0.55)',   // green
-      warn:   'rgba(255, 120, 120, 0.55)'    // red
+      waiting:'rgba(255, 230, 120, 0.50)',
+      playing:'rgba(120, 200, 255, 0.55)',
+      done:   'rgba(140, 235, 170, 0.55)',
+      warn:   'rgba(255, 120, 120, 0.55)'
     },
-    flutterWaves: 2, flutterAmp: 28,
-    /* --- Interaction knobs (new) --- */
-    interact: {
-      enabled: true,     // set false to disable pairing/dancing
-      rangePx: 110,      // proximity threshold
-      danceMs: 2000,     // ~2s circle dance
-      cooldownMs: 25000, // per-butterfly cooldown after a dance
-      minApproachMs: 500 // must be close for at least this long
-    },
-    // Temporary tints during dance (purple, green, magenta)
-    danceTints: [
-      'rgba(190,140,255,0.55)',
-      'rgba(140,235,170,0.55)',
-      'rgba(255,140,210,0.55)'
-    ]
+    flutterWaves: 2, flutterAmp: 28
   }
 };
 
@@ -117,7 +104,7 @@ const revealLayer = (() => {
   return el;
 })();
 
-/* Styles */
+/* Styles (includes word-spacing via margin-right on each word) */
 (()=>{ const css = `
   .env-poem-line{position:absolute;white-space:nowrap;color:${CFG.colors.poemLine};
     text-shadow:0 1px 3px ${CFG.colors.poemShadow};opacity:.95;font-weight:600;letter-spacing:.2px;
@@ -127,7 +114,10 @@ const revealLayer = (() => {
     padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
     font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
   .env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1;}
-  .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
+  .env-reveal-word{
+    display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);
+    margin-right:.35em; /* ← persistent spacing between words (no trailing-space hacks) */
+  }
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
 /* Status */
@@ -154,7 +144,7 @@ async function runPoemDrift(){
       spawnDriftingLine(CFG.poem.lines[i], driftMs);
 
       if (i < CFG.poem.lines.length - 1){
-        // Breath in seconds (current definition); adjustable via controller
+        // Breath = seconds between lines (live), but you can keep ratio logic elsewhere if desired
         const breathS = Number(window.__WINDS_SONG__.breath) || 16;
         await wait(Math.max(500, Math.round(breathS*1000)));
       }
@@ -184,7 +174,6 @@ function spawnDriftingLine(text, driftDurationMs){
     const k = clamp((t-t0)/driftDurationMs,0,1);
     const x = startX + (endX - startX)*k;
     el.style.transform = `translate(${x}px,0)`;
-    // early fade-in & smooth fade-out
     const fadeIn = Math.min(1, k/0.20), fadeOut = Math.min(1, (1-k)/0.20);
     el.style.opacity = String(peak * Math.min(fadeIn, fadeOut));
     if (k<1) requestAnimationFrame(step); else el.remove();
@@ -192,7 +181,7 @@ function spawnDriftingLine(text, driftDurationMs){
   requestAnimationFrame(step);
 }
 
-/* Bottom reveal (Elegra per phase) — spacing fix preserved */
+/* Bottom reveal (Elegra per phase) — with spacing fix + smooth bar fade-out */
 async function runRevealSequence(){
   const elegraS = Number(window.__WINDS_SONG__.elegra) || 15;
   const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
@@ -201,14 +190,15 @@ async function runRevealSequence(){
   const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
   const lines = CFG.poem.lines.map(line=>{
     const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
-    const words = line.split(' ').map((w,i,arr)=>{
+    const words = line.split(' ').map((w)=>{
       const s=document.createElement('span'); s.className='env-reveal-word';
-      s.textContent = (i<arr.length-1) ? (w+' ') : w; // <-- preserve spaces
+      s.textContent = w; // ← no trailing spaces; CSS margin supplies spacing
       lineEl.appendChild(s); return s;
     });
     bar.appendChild(lineEl); return { lineEl, words };
   });
   bar.style.display='block';
+  bar.style.opacity='1';
 
   await revealWords(lines[0].words, half);
   await crossoverFade(lines[0].words, lines[1].words, half);
@@ -216,6 +206,10 @@ async function runRevealSequence(){
   await crossoverFade(lines[2].words, lines[3].words, half);
   await fadeWords(lines[3].words, half);
 
+  // Smooth bar fade-out before removal (prevents “pop”)
+  bar.style.transition = 'opacity 600ms ease';
+  bar.style.opacity = '0';
+  await wait(650);
   bar.remove();
 }
 async function revealWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
@@ -236,215 +230,52 @@ async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.leng
     w.style.transition='opacity 600ms ease, transform 600ms ease';
     w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
 
-/* --------------------------
-   Butterfly (Wind applied + interaction manager)
-   - Normal sparse flights as before
-   - Random, optional “circle dance” when two are close for a moment
---------------------------- */
-const ButterflyManager = (() => {
-  const list = [];
-  let rafId = 0;
-  let nextDanceTintIdx = 0;
+/* Butterfly (Wind applied per flight) */
+function spawnButterfly(){
+  const windVal = Number(window.__WINDS_SONG__.wind) || 5;
+  const windFact= Math.max(0.1, windVal/5);
 
-  function setTint(el, color) {
-    const wings = el.querySelectorAll('path');
-    wings.forEach(p => p.setAttribute('fill', color));
+  const size=randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
+  const tint=(()=>{switch(poemStatus.state){
+    case 'playing': return CFG.butterflies.tint.playing;
+    case 'done':    return CFG.butterflies.tint.done;
+    case 'warn':    return CFG.butterflies.tint.warn;
+    default:        return CFG.butterflies.tint.waiting; }})();
+
+  const el=document.createElement('div');
+  Object.assign(el.style,{position:'absolute',top:`${randi(40, Math.max(120, window.innerHeight/2))}px`,
+    left:'0px',width:`${size}px`,height:`${size}px`,opacity:'1',pointerEvents:'none',
+    zIndex:String(CFG.z.leaves),willChange:'transform'});
+  el.innerHTML = `
+    <svg viewBox="0 0 120 80" width="${size}" height="${size}" style="display:block">
+      <defs><filter id="bshadow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="rgba(0,0,0,0.35)"/></filter></defs>
+      <g filter="url(#bshadow)">
+        <path d="M60,40 C30,5 5,5 10,35 C15,60 35,55 60,40 Z" fill="${tint}"/>
+        <path d="M60,40 C90,5 115,5 110,35 C105,60 85,55 60,40 Z" fill="${tint}"/>
+        <rect x="57" y="35" width="6" height="16" rx="3" fill="rgba(30,40,60,0.6)"/>
+      </g>
+    </svg>`;
+  leavesLayer.appendChild(el);
+
+  const fromLeft=Math.random()<0.5;
+  const startX=fromLeft?-40:(window.innerWidth+40);
+  const endX  =fromLeft?(window.innerWidth+40):-40;
+  const baseTop=parseFloat(el.style.top);
+
+  const base=randi(CFG.butterflies.baseTravelMsMin, CFG.butterflies.baseTravelMsMax);
+  const travelMs=Math.max(800, Math.round(base/ windFact));
+  const t0=performance.now();
+
+  function anim(t){
+    const k=clamp((t-t0)/travelMs,0,1);
+    const x=startX + (endX-startX)*k;
+    const y=baseTop + Math.sin(k*Math.PI*CFG.butterflies.flutterWaves)*CFG.butterflies.flutterAmp;
+    el.style.transform=`translate(${x}px, ${y-baseTop}px)`;
+    if(k<1) requestAnimationFrame(anim); else el.remove();
   }
-
-  function posAlongPath(obj, k) {
-    const x = obj.startX + (obj.endX - obj.startX) * k;
-    const flutterY = Math.sin(k * Math.PI * CFG.butterflies.flutterWaves) * CFG.butterflies.flutterAmp;
-    const y = obj.baseTop + flutterY;
-    return { x, y };
-  }
-
-  function spawnOne() {
-    const windVal  = Number(window.__WINDS_SONG__.wind) || 5;
-    const windFact = Math.max(0.1, windVal / 5);
-    const size = randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
-
-    // status tint mirrors poem status
-    const baseTint = (() => {
-      switch (poemStatus.state) {
-        case 'playing': return CFG.butterflies.tint.playing;
-        case 'done':    return CFG.butterflies.tint.done;
-        case 'warn':    return CFG.butterflies.tint.warn;
-        default:        return CFG.butterflies.tint.waiting;
-      }
-    })();
-
-    const el = document.createElement('div');
-    Object.assign(el.style, {
-      position: 'absolute',
-      top: `${randi(40, Math.max(120, window.innerHeight / 2))}px`,
-      left: '0px',
-      width: `${size}px`,
-      height: `${size}px`,
-      opacity: '1',
-      pointerEvents: 'none',
-      zIndex: String(CFG.z.leaves),
-      willChange: 'transform'
-    });
-    el.innerHTML = `
-      <svg viewBox="0 0 120 80" width="${size}" height="${size}" style="display:block">
-        <defs>
-          <filter id="bshadow" x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="rgba(0,0,0,0.35)"/>
-          </filter>
-        </defs>
-        <g filter="url(#bshadow)">
-          <path d="M60,40 C30,5 5,5 10,35 C15,60 35,55 60,40 Z" />
-          <path d="M60,40 C90,5 115,5 110,35 C105,60 85,55 60,40 Z" />
-          <rect x="57" y="35" width="6" height="16" rx="3" fill="rgba(30,40,60,0.6)"/>
-        </g>
-      </svg>`;
-    leavesLayer.appendChild(el);
-    setTint(el, baseTint);
-
-    const fromLeft = Math.random() < 0.5;
-    const startX   = fromLeft ? -40 : (window.innerWidth + 40);
-    const endX     = fromLeft ? (window.innerWidth + 40) : -40;
-
-    const baseTop  = parseFloat(el.style.top);
-    const base     = randi(CFG.butterflies.baseTravelMsMin, CFG.butterflies.baseTravelMsMax);
-    const travelMs = Math.max(800, Math.round(base / windFact));
-
-    const obj = {
-      el,
-      state: 'free',             // 'free' | 'dancing' | 'cooldown'
-      startX, endX,
-      baseTop,
-      travelMs,
-      t0: performance.now(),
-      k: 0,
-      lastCloseSince: 0,
-      lastDanceDone: 0,
-      freeTint: baseTint,
-      dance: null                // {cx, cy, r, t0, dur, ccw}
-    };
-    list.push(obj);
-    return obj;
-  }
-
-  function updateFree(obj, now) {
-    const dt = now - obj.t0;
-    obj.k = clamp(dt / obj.travelMs, 0, 1);
-    const p = posAlongPath(obj, obj.k);
-    obj.el.style.transform = `translate(${p.x}px, ${p.y - obj.baseTop}px)`;
-    if (obj.k >= 1) {
-      obj.el.remove();
-      const i = list.indexOf(obj);
-      if (i >= 0) list.splice(i, 1);
-      return false;
-    }
-    return true;
-  }
-
-  function considerPair(a, b, now) {
-    const cfg = CFG.butterflies.interact;
-    if (!cfg?.enabled) return false;
-
-    // cooldown guard
-    if (now - a.lastDanceDone < cfg.cooldownMs || now - b.lastDanceDone < cfg.cooldownMs) return false;
-
-    const pa = posAlongPath(a, a.k), pb = posAlongPath(b, b.k);
-    const dx = pa.x - pb.x, dy = (pa.y) - (pb.y);
-    const dist = Math.hypot(dx, dy);
-    if (dist > cfg.rangePx) {
-      a.lastCloseSince = b.lastCloseSince = 0;
-      return false;
-    }
-
-    if (!a.lastCloseSince || !b.lastCloseSince) {
-      a.lastCloseSince = b.lastCloseSince = now;
-      return false;
-    }
-    if ((now - a.lastCloseSince) < cfg.minApproachMs || (now - b.lastCloseSince) < cfg.minApproachMs) return false;
-
-    // set up dance
-    const cx = (pa.x + pb.x) * 0.5;
-    const cy = (pa.y + pb.y) * 0.5;
-    const r  = Math.max(28, Math.min(64, dist * 0.6));
-    const dur= cfg.danceMs;
-
-    const tint = CFG.butterflies.danceTints[(nextDanceTintIdx++) % CFG.butterflies.danceTints.length];
-
-    a.state = b.state = 'dancing';
-    a.dance = { cx, cy, r, t0: now, dur, ccw: false };
-    b.dance = { cx, cy, r, t0: now, dur, ccw: true  };
-
-    setTint(a.el, tint); setTint(b.el, tint);
-    return true;
-  }
-
-  function updateDance(obj, now) {
-    const d = obj.dance;
-    const u = clamp((now - d.t0) / d.dur, 0, 1);
-    const ang0 = d.ccw ? Math.PI * 0.2 : Math.PI * 1.2;
-    const ang  = ang0 + (d.ccw ? 1 : -1) * u * Math.PI * 1.6;
-
-    const x = d.cx + d.r * Math.cos(ang);
-    const y = d.cy + d.r * Math.sin(ang);
-    obj.el.style.transform = `translate(${x}px, ${y - obj.baseTop}px)`;
-
-    if (u >= 1) {
-      // resume flight near current absolute X
-      const total = (obj.endX - obj.startX);
-      obj.k  = clamp((x - obj.startX) / total, 0, 0.98);
-      obj.t0 = now - obj.k * obj.travelMs;
-      obj.state = 'cooldown';
-      obj.lastDanceDone = now;
-      obj.dance = null;
-      // restore original tint (status)
-      setTint(obj.el, obj.freeTint);
-    }
-  }
-
-  function updateCooldown(obj, now) {
-    obj.state = 'free';
-    updateFree(obj, now);
-  }
-
-  function tick(now) {
-    // advance each butterfly
-    for (let i = list.length - 1; i >= 0; i--) {
-      const b = list[i];
-      if (b.state === 'free') {
-        if (!updateFree(b, now)) continue;
-      } else if (b.state === 'dancing') {
-        updateDance(b, now);
-      } else if (b.state === 'cooldown') {
-        updateCooldown(b, now);
-      }
-    }
-
-    // attempt one pairing this frame (keeps things subtle)
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i]; if (a.state !== 'free') continue;
-      for (let j = i + 1; j < list.length; j++) {
-        const b = list[j]; if (b.state !== 'free') continue;
-        if (considerPair(a, b, now)) { i = list.length; break; }
-      }
-    }
-
-    requestAnimationFrame(tick);
-  }
-
-  // kick the loop once the first butterfly spawns
-  let loopStarted = false;
-  function ensureLoop() {
-    if (loopStarted) return;
-    loopStarted = true;
-    requestAnimationFrame(tick);
-  }
-
-  return {
-    spawn() { const obj = spawnOne(); ensureLoop(); return obj; },
-    count() { return list.length; }
-  };
-})();
-
-function spawnButterfly(){ ButterflyManager.spawn(); }
+  requestAnimationFrame(anim);
+}
 async function runButterfliesLoop(){
   await wait(randi(6_000,14_000)); spawnButterfly();
   while(true){ await wait(randi(60_000,90_000)); spawnButterfly(); }
