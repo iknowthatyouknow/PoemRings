@@ -1,7 +1,7 @@
 // environment-loader.js
 
 // --- Mobile routing (no index.html changes) -------------------------
-(function mobileRouter() {
+(function mobileRouter(){
   const params = new URLSearchParams(location.search);
 
   const isMobileUA =
@@ -34,48 +34,29 @@
 
 (function () {
   function injectEnvironment() {
-    if (!document.body) return;
+    if (!document.body || document.getElementById('environment-iframe')) return;
 
     // --- 1) Inject the background iframe (wind + leaves canvas) ---
-    // IMPORTANT: don't return the whole function if iframe exists; just skip creating it.
-    let iframe = document.getElementById('environment-iframe');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'environment-iframe';
-      iframe.src = 'environment.html'; // must exist in the same folder
-      iframe.title = 'Decorative background';
-      iframe.setAttribute('aria-hidden', 'true');
-      iframe.tabIndex = -1;
+    const iframe = document.createElement('iframe');
+    iframe.id = 'environment-iframe';
+    iframe.src = 'environment.html'; // must exist in the same folder
+    iframe.title = 'Decorative background';
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.tabIndex = -1;
 
-      Object.assign(iframe.style, {
-        position: 'fixed',
-        inset: '0',
-        width: '100vw',
-        height: '100vh',
-        border: '0',
-        background: 'transparent',
-        pointerEvents: 'none',
-        zIndex: '0' // sits behind main content
-      });
+    Object.assign(iframe.style, {
+      position: 'fixed',
+      inset: '0',
+      width: '100vw',
+      height: '100vh',
+      border: '0',
+      background: 'transparent',
+      pointerEvents: 'none',
+      zIndex: '0' // sits behind main content
+    });
 
-      // Put it under everything
-      document.body.prepend(iframe);
-      console.log('[environment-loader] environment iframe injected');
-    } else {
-      // Ensure existing iframe still has the correct attributes/styles (defensive)
-      iframe.setAttribute('aria-hidden', 'true');
-      iframe.tabIndex = -1;
-      Object.assign(iframe.style, {
-        position: 'fixed',
-        inset: '0',
-        width: '100vw',
-        height: '100vh',
-        border: '0',
-        background: 'transparent',
-        pointerEvents: 'none',
-        zIndex: '0'
-      });
-    }
+    // Put it under everything
+    document.body.prepend(iframe);
 
     // Ensure your main wrapper paints above (no layout change)
     const wrap = document.querySelector('.wrap');
@@ -94,24 +75,85 @@
       s.onload  = () => console.log('[environment-loader] environment.js loaded');
       s.onerror = () => console.warn('[environment-loader] FAILED to load environment.js');
       document.head.appendChild(s);
-    } else {
-      // If already present, make sure it's not a stale failed tag
-      // (no-op here; log to help debug)
-      console.log('[environment-loader] environment.js already present');
     }
 
-    // --- 3) Inject windsong-controller.js AFTER environment.js ---
+    // --- 3) Inject windsong-controller.js AFTER environment.js (controls) ---
     if (!document.querySelector('script[data-windsong-ctl="1"]')) {
       const c = document.createElement('script');
       c.src = 'windsong-controller.js';
       c.defer = true;
       c.async = false;
       c.dataset.windsongCtl = '1';
-      c.onload  = () => console.log('[environment-loader] windsong-controller.js loaded');
+      c.onload  = () => {
+        console.log('[environment-loader] windsong-controller.js loaded');
+        // Try to position the activator once controller has created it
+        scheduleActivatorReposition();
+      };
       c.onerror = () => console.warn('[environment-loader] FAILED to load windsong-controller.js');
       document.head.appendChild(c);
     } else {
-      console.log('[environment-loader] windsong-controller.js already present');
+      // If controller is already there (hard refresh race), still ensure placement
+      scheduleActivatorReposition();
+    }
+
+    // --- 4) Inject specialevent.js (butterfly party) ---
+    if (!document.querySelector('script[data-specialevent="1"]')) {
+      const p = document.createElement('script');
+      p.src = 'specialevent.js';
+      p.defer = true;
+      p.async = false;
+      p.dataset.specialevent = '1';
+      p.onload  = () => console.log('[environment-loader] specialevent.js loaded');
+      p.onerror = () => console.warn('[environment-loader] FAILED to load specialevent.js');
+      document.head.appendChild(p);
+    }
+
+    console.log('[environment-loader] environment iframe injected');
+  }
+
+  // Reposition the Wind Song activator a few pixels under the 3-dot menu (top-right)
+  function scheduleActivatorReposition() {
+    let attempts = 0;
+    const maxAttempts = 120; // ~10s @ 83ms
+    const tryPlace = () => {
+      attempts++;
+      const activator = document.querySelector('.ws-activator');
+      if (activator) {
+        positionActivatorNearThreeDots(activator);
+        // keep it sticky on resize
+        window.addEventListener('resize', () => positionActivatorNearThreeDots(activator));
+        return; // done
+      }
+      if (attempts < maxAttempts) {
+        setTimeout(tryPlace, 83);
+      }
+    };
+    tryPlace();
+  }
+
+  function positionActivatorNearThreeDots(node) {
+    // Try likely selectors for the three-dot menu; we don't modify index.html
+    const candidates = document.querySelectorAll(
+      '.three-dots, .menu-toggle, .menu button, nav .menu button, .about-menu, [data-role="menu"], .menu > button'
+    );
+    let anchor = null;
+    for (const el of candidates) {
+      const rect = el.getBoundingClientRect();
+      if (rect && rect.width && rect.height) { anchor = el; break; }
+    }
+
+    if (anchor) {
+      const r = anchor.getBoundingClientRect();
+      node.style.top = `${Math.max(8, r.bottom + 8)}px`;
+      node.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+      node.style.left = 'auto';
+      node.style.bottom = 'auto';
+    } else {
+      // Fallback near top-right if we can’t detect the menu
+      node.style.top = '56px';
+      node.style.right = '14px';
+      node.style.left = 'auto';
+      node.style.bottom = 'auto';
     }
   }
 
