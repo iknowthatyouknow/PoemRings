@@ -10,8 +10,8 @@
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
-        wind:   clampN(s.wind,   1, 10, 5),
-        breath: clampN(s.breath, 6,  30, 16),
+        wind:   clampN(s.wind,   1, 10, 5),  // 5 = baseline
+        breath: clampN(s.breath, 6,  30, 16),// now: butterfly feel only
         elegra: clampN(s.elegra, 8,  30, 15),
         rez:    clampN(s.rez,    1,   6,  1),
       };
@@ -19,7 +19,9 @@
       return { wind:5, breath:16, elegra:15, rez:1 };
     }
   }
-  function saveSettings(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+  function saveSettings(s) {
+    localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
@@ -32,7 +34,7 @@
   // Inform environment.html about current wind multiplier (so leaves speed match)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (unchanged visuals) ----------
+  // ---------- Minimal styles (same clean look) ----------
   injectCSS(`
     .ws-activator{
       position:fixed; z-index:9998;
@@ -40,7 +42,6 @@
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
       box-shadow:0 6px 18px rgba(0,0,0,.25);
-      right:14px; bottom:14px; /* fallback if About anchor not found */
     }
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
@@ -51,27 +52,26 @@
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
       padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
-      right:14px; bottom:62px; display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
     .ws-close{ cursor:pointer; opacity:.8; }
     .ws-close:hover{ opacity:1; }
-
     .ws-row{ display:flex; align-items:center; gap:10px; margin:10px 2px; }
     .ws-icon{ width:22px; height:22px; opacity:.9; flex:0 0 auto; }
     .ws-label{ color:#cfe7ff; min-width:72px; }
     .ws-slider{ flex:1; display:flex; align-items:center; gap:8px; }
-
-    .ws-slider input[type="range"]{ width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none; }
+    .ws-slider input[type="range"]{
+      width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none;
+    }
     .ws-slider input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
       background:#8dc6ff; border:1px solid rgba(255,255,255,.6);
       box-shadow:0 0 0 3px rgba(141,198,255,.15);
     }
     .ws-val{ width:36px; text-align:right; color:#a9c6ff; opacity:.95; font-variant-numeric:tabular-nums; }
-
     .ws-help{ color:#9fb4d8; opacity:.85; font-size:12px; margin:6px 4px 2px; }
+
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
       flex:1; text-align:center; padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none;
@@ -79,24 +79,26 @@
     }
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
-
-    /* Optional: menu item if a site menu exists (we do NOT use it now; activator floats) */
-    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // Always use floating activator, but try to anchor it under the About (three-dot) menu
+  // Place activator a bit below the “three-dot About” menu (if we can find it),
+  // otherwise fall back to bottom-right.
   const activator = buildActivator(openPanel);
   document.body.appendChild(activator);
-  anchorActivatorUnderAbout(activator);
+  positionActivatorNearMoreMenu(activator);
+
+  // Reposition on resize (layout can shift)
+  window.addEventListener('resize', () => positionActivatorNearMoreMenu(activator));
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
+    el.style.display = 'none';
 
     el.innerHTML = `
       <div class="ws-head">
@@ -144,7 +146,8 @@
       </div>
 
       <div class="ws-help">
-        Wind = speed of all moving elements. Breath = butterfly motion character. Elegra = reveal pacing (seconds). Rez = times per hour (1 = once per refresh).
+        Breath = butterfly feel. Elegra = reveal pacing (seconds).
+        Rez = times per hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
@@ -152,7 +155,7 @@
       </div>
     `;
 
-    // Inputs + initial values
+    // Wire inputs + initial values
     const wind   = el.querySelector('#ws-wind');
     const breath = el.querySelector('#ws-breath');
     const elegra = el.querySelector('#ws-elegra');
@@ -181,10 +184,10 @@
     elegra.addEventListener('input', syncVals);
     rez.addEventListener('input', syncVals);
 
-    // Close button (X)
+    // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply (saves, broadcasts, and closes)
+    // Apply (applies + closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
@@ -198,23 +201,43 @@
     return el;
   }
 
-  function openPanel() { document.querySelector('.ws-panel').style.display = 'block'; }
-  function onExit()     { document.querySelector('.ws-panel').style.display = 'none'; }
+  function openPanel() {
+    const p = document.querySelector('.ws-panel');
+    if (p) {
+      // Position the panel near the activator (top-right by default)
+      const a = document.querySelector('.ws-activator');
+      if (a) {
+        const r = a.getBoundingClientRect();
+        p.style.right  = `${Math.max(14, window.innerWidth - r.right)}px`;
+        p.style.bottom = `${Math.max(62, window.innerHeight - r.top + 8)}px`;
+      } else {
+        // default bottom-right
+        p.style.right = '14px';
+        p.style.bottom = '62px';
+      }
+      p.style.display = 'block';
+    }
+  }
+
+  function onExit() {
+    const p = document.querySelector('.ws-panel');
+    if (p) p.style.display = 'none';
+  }
 
   function onApply(next) {
-    // Persist
+    // Save
     saveSettings(next);
 
-    // Update shared state for environment.js (drift/reveal/butterflies)
+    // Update shared state for environment.js
     window.__WINDS_SONG__.wind   = Number(next.wind);
-    window.__WINDS_SONG__.breath = Number(next.breath);
+    window.__WINDS_SONG__.breath = Number(next.breath); // butterflies only
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Dispatch app-wide event
+    // Broadcast to environment.js
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
 
-    // Inform the background iframe (environment.html) about wind speed as well
+    // Inform background iframe (environment.html) about wind speed (leaves)
     postWindToEnvironment(next.wind);
 
     // Close panel
@@ -227,50 +250,43 @@
     b.innerHTML = svgWind();
     b.title = 'WindSong';
     b.addEventListener('click', openFn);
+    // default position (bottom-right); may be repositioned below
+    Object.assign(b.style, { right: '14px', bottom: '14px' });
     return b;
   }
 
-  // Try to position the activator a few pixels UNDER the three-dot About menu
-  function anchorActivatorUnderAbout(btn) {
-    const anchor = findAboutAnchor();
-    if (!anchor) return; // keep fallback bottom-right
-
-    function place() {
-      try {
-        const r = anchor.getBoundingClientRect();
-        // place 10px below the anchor, right-aligned to its right edge
-        btn.style.top = Math.round(window.scrollY + r.bottom + 10) + 'px';
-        btn.style.left = Math.round(window.scrollX + r.right - btn.offsetWidth) + 'px';
-        btn.style.right = 'auto';
-        btn.style.bottom = 'auto';
-      } catch {}
-    }
-    place();
-    window.addEventListener('resize', place, { passive: true });
-    window.addEventListener('scroll', place, { passive: true });
-  }
-
-  function findAboutAnchor() {
-    // Heuristics: look for an element that seems to be the three-dot menu or an About trigger
-    // Try common selectors first
+  function positionActivatorNearMoreMenu(buttonEl) {
+    // Try to find the three-dot About menu trigger; common guesses:
     const candidates = [
-      '.menu .dots', '.dots', '.menu [aria-label="Menu"]', '.menu button',
-      'nav .dots', 'nav button', '.about-trigger', '[data-about-trigger]'
+      '.menu [aria-label="More"]',
+      '.menu .more',
+      '.menu button',
+      '.menu',
+      'nav .more',
+      'nav [aria-label="More"]',
+      'nav button.more',
+      'nav',
+      '.wrap .menu'
     ];
+    let anchor = null;
     for (const sel of candidates) {
-      const el = document.querySelector(sel);
-      if (el) return el;
+      const found = document.querySelector(sel);
+      if (found) { anchor = found; break; }
     }
-    // Fallback: any element containing text "About" (not perfect, but safe)
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-    let node;
-    while ((node = walker.nextNode())) {
-      try {
-        const t = (node.textContent || '').trim().toLowerCase();
-        if (t === 'about' || t === 'about!') return node;
-      } catch {}
+    if (!anchor) {
+      // fallback: bottom-right
+      Object.assign(buttonEl.style, { right: '14px', bottom: '14px', left: '', top: '' });
+      return;
     }
-    return null;
+    const r = anchor.getBoundingClientRect();
+    // Place a few pixels below it, right-aligned to the anchor’s right edge
+    const top  = Math.round(r.bottom + 10);
+    const left = Math.round(r.right - 38); // align right edges (38px wide)
+    Object.assign(buttonEl.style, {
+      top:  `${top}px`,
+      left: `${Math.max(8, left)}px`,
+      right: '', bottom: ''
+    });
   }
 
   function postWindToEnvironment(windVal) {
@@ -286,7 +302,7 @@
     document.head.appendChild(tag);
   }
 
-  // ---------- SVG icons ----------
+  // ---------- SVG icons (unchanged visuals) ----------
   function svgWind() {
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -297,7 +313,7 @@
       </svg>`;
   }
   function svgBreath() {
-    // "poem ↔ poem" glyph
+    // "poem ↔ poem" glyph: two blocks with a bidirectional arrow
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="4" width="18" height="16" rx="2" />
@@ -308,6 +324,7 @@
       </svg>`;
   }
   function svgElegra() {
+    // rhythm line (fade pattern feel)
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
