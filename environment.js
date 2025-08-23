@@ -1,21 +1,35 @@
 /* =========================================================================
-   environment.js (drop-in)
-   - No index.html changes; visuals unchanged
-   - Reads Wind/Breath/Elegra live so adjustments take effect mid-session
-   - 5 on the Wind slider = current baseline speed
-   - Special-poem integration:
-       * When special-poem:begin -> suspend ONLY the bottom reveal (this cycle)
-       * Let drifting lines finish naturally
-       * Next Wind’s Song cycle re-enables reveal automatically (if not special)
+   environment.js (final, ruleset-compliant)
+   - No index.html changes
+   - Wind controls all motion speeds (poem drift & butterflies). Leaves wind
+     is handled in environment.html via postMessage from the controller.
+   - Breath controls butterfly oscillation (not poem spacing).
+   - Poem drifting: inter-line spacing auto-scales with Wind so the visual
+     gap stays consistent (baseline ≈ 16s at Wind=5).
+   - Bottom reveal:
+       • Starts ONLY after the last drifting line has fully exited the screen.
+       • Smooth fade-in/out, correct word spacing (always).
+       • Elegra slider no longer affects reveal speed (fixed timing here).
+       • Suppressed during Special Poem; resume next Wind’s Song cycle.
+   - Butterflies:
+       • Colors: waiting=yellow, playing=red, done=green; ambient palette after done.
+       • Proximity “dance” when within radius (55px) with higher probability
+         for first 5 minutes after page load; then normal probability.
+       • Special Poem “party”: handled by events from index.js (see notes).
+   - Rez: handled by windsong-controller.js; environment honors triggers.
    ======================================================================== */
 
-/* Utils */
+/* --------------------------
+   Utilities
+--------------------------- */
 const wait  = (ms) => new Promise(res => setTimeout(res, ms));
 const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-/* Restore saved settings if controller loaded earlier */
+/* --------------------------
+   Restore user settings (if controller loaded earlier)
+--------------------------- */
 (function restoreWindsSongFromStorage(){
   try {
     const raw = localStorage.getItem('windsong.settings.v1');
@@ -29,18 +43,41 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   } catch {}
 })();
 
-/* Shared state + listeners */
-window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:5, breath:16, elegra:15, rez:1 };
+/* --------------------------
+   Shared knobs (defaults)
+--------------------------- */
+window.__WINDS_SONG__ = window.__WINDS_SONG__ || {
+  wind:   5,   // 1..10 (5 = baseline speeds)
+  breath: 16,  // now butterfly oscillation "strength" (6..30)
+  elegra: 15,  // kept for UI, but NOT used for reveal timing anymore
+  rez:    1
+};
+
 window.addEventListener("windsong:update", (e) => {
   const { wind, breath, elegra, rez } = e.detail || {};
   if (wind   !== undefined) window.__WINDS_SONG__.wind   = Number(wind);
   if (breath !== undefined) window.__WINDS_SONG__.breath = Number(breath);
-  if (elegra !== undefined) window.__WINDS_SONG__.elegra = Number(elegra);
+  if (elegra !== undefined) window.__WINDS_SONG__.elegra = Number(elegra); // ignored for reveal
   if (rez    !== undefined) window.__WINDS_SONG__.rez    = Number(rez);
 });
-window.addEventListener("windsong:trigger", () => { if (typeof runPoemDrift === "function") runPoemDrift(); });
 
-/* Config (visual tokens only) */
+window.addEventListener("windsong:trigger", () => {
+  if (typeof runPoemDrift === "function") runPoemDrift();
+});
+
+/* Special poem lifecycle signals (sent by index.js) */
+let SPECIAL_ACTIVE = false;
+window.addEventListener('special-poem:begin', () => {
+  SPECIAL_ACTIVE = true;
+  cancelBottomReveal(); // if a reveal was pending/showing, fade/clear it
+});
+window.addEventListener('special-poem:end', () => {
+  SPECIAL_ACTIVE = false; // next Wind’s Song cycle will be allowed again
+});
+
+/* --------------------------
+   Config (visual constants)
+--------------------------- */
 const CFG = {
   z: { leaves: 2, poem: 3, reveal: 4, debug: 9 },
   colors: { poemLine:'#ffffff', poemShadow:'rgba(0,0,0,.35)', reveal:'#ffffff' },
@@ -51,31 +88,43 @@ const CFG = {
       "Your breath brushed my world into motion,",
       "For life’s breath is the wind, and your breath its creation."
     ],
-    baseFirstLineDelayMaxMs: 120_000,   // surprise window
-    baseDriftDurationMs:     32_000,    // cross-screen baseline at Wind=5
-    driftFontMin: 13, driftFontMax: 16
+    baseFirstLineDelayMaxMs: 120_000,   // first line appears sometime in 0..120s
+    baseDriftDurationMs:     32_000,    // cross-screen time at Wind=5
+    driftFontMin: 13, driftFontMax: 16,
+    targetVisualGapS: 16                // baseline gap between line spawns when Wind=5
   },
   reveal: {
-    enabled: true,
-    appearAfterLastLineMs: 30_000,
-    rowPadding: 10, fontSizePx: 16,
-    barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
-    border: '1px solid rgba(255,255,255,.08)'
+    // Elegra is FIXED here; slider no longer applies.
+    appearCushionMs: 1200,             // extra cushion after last line exits
+    wordStepMs: 400,                   // per-word tween step used inside helpers
+    pairPhaseMs: 7500                  // each 2-line phase total (slow, smooth)
   },
   butterflies: {
     baseTravelMsMin: 18_000, baseTravelMsMax: 26_000,
     sizeMin: 20, sizeMax: 28,
+    flutterWavesBase: 2, flutterAmpBase: 28, // baseline oscillation
+    interactRadius: 55,                       // proximity radius
+    interactBoostWindowMs: 5 * 60 * 1000,     // first 5 minutes boost
+    interactBaseProb: 0.08,                   // normal chance on proximity
+    interactBoostProb: 0.22,                  // during boost window
+    paletteAmbient: [
+      'rgba(120, 200, 255, 0.55)', // blue
+      'rgba(220, 120, 255, 0.55)', // magenta
+      'rgba(180, 140, 255, 0.55)', // purple
+      'rgba(140, 235, 170, 0.55)'  // green (also used for "done")
+    ],
     tint: {
-      waiting:'rgba(255, 230, 120, 0.50)',  // yellow
-      playing:'rgba(255, 120, 120, 0.55)',  // red (while poem playing)
-      done:   'rgba(140, 235, 170, 0.55)',  // green
-      warn:   'rgba(255, 120, 120, 0.55)'
-    },
-    flutterWaves: 2, flutterAmp: 28
+      waiting: 'rgba(255, 230, 120, 0.60)', // yellow (scheduled)
+      playing: 'rgba(255, 120, 120, 0.60)', // RED (poem playing)
+      done:    'rgba(140, 235, 170, 0.60)', // green (finished)
+      warn:    'rgba(255, 120, 120, 0.75)'  // red (warning state)
+    }
   }
 };
 
-/* Layers */
+/* --------------------------
+   Layers
+--------------------------- */
 const envRoot = (() => {
   let el = document.getElementById('env-root');
   if (!el) { el = document.createElement('div'); el.id='env-root';
@@ -106,92 +155,106 @@ const revealLayer = (() => {
   return el;
 })();
 
-/* Styles */
+/* --------------------------
+   Styles
+--------------------------- */
 (()=>{ const css = `
   .env-poem-line{position:absolute;white-space:nowrap;color:${CFG.colors.poemLine};
     text-shadow:0 1px 3px ${CFG.colors.poemShadow};opacity:.95;font-weight:600;letter-spacing:.2px;
     user-select:none;will-change:transform,opacity;pointer-events:none;}
   .env-reveal-bar{max-width:980px;width:calc(100vw - 24px);margin:0 12px 10px;
-    background:${CFG.reveal.barBg};border:${CFG.reveal.border};border-radius:10px;
-    padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
-    font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
+    background:linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9));
+    border:1px solid rgba(255,255,255,.08);border-radius:10px;
+    padding:10px 14px;color:${CFG.colors.reveal};
+    font-size:16px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;
+    opacity:0; transition:opacity 600ms ease;}
   .env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1;}
   .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
-/* Status */
+/* --------------------------
+   Status (influences butterfly tint)
+--------------------------- */
 const poemStatus = { state:'waiting', set(next){ this.state = next; } };
 
-/* ------- Special-poem integration (suspend reveal during special) ------- */
-let specialActive = false;
-let suppressRevealThisCycle = false;
-let currentReveal = null; // {barEl, cancelled:boolean}
-
-window.addEventListener('special-poem:begin', () => {
-  specialActive = true;
-  suppressRevealThisCycle = true; // ensure current cycle never reveals
-  // If a reveal is currently showing or pending, fade it out and cancel
-  if (currentReveal && currentReveal.barEl) {
-    gracefulRemoveReveal(currentReveal.barEl);
-  }
-  if (currentReveal) currentReveal.cancelled = true;
-});
-
-window.addEventListener('special-poem:end', () => {
-  specialActive = false;
-  // Do NOT reset suppressRevealThisCycle here; it resets at the *next* cycle start.
-});
-
-/* Poem drift (live knobs applied per line) */
+/* --------------------------
+   Poem drift with Wind-based spacing
+--------------------------- */
 let __windsSongRunInProgress = false;
+let __lastLineExitAt = 0;    // timestamp when the final line actually exits
+let __revealCancelled = false;
+
 async function runPoemDrift(){
   if (__windsSongRunInProgress) return;
   __windsSongRunInProgress = true;
-  try{
-    // New cycle begins: if no special poem active, allow reveal again
-    if (!specialActive) suppressRevealThisCycle = false;
+  __revealCancelled = false;
 
+  try{
+    // Random surprise window for first line
     const firstDelayMs = randi(0, CFG.poem.baseFirstLineDelayMaxMs);
+
+    // Warn if nothing started after 130s
     let started = false;
     (async()=>{ await wait(130_000); if(!started) poemStatus.set('warn'); })();
 
+    // Optional delay before starting
     await wait(firstDelayMs);
-    started = true; poemStatus.set('playing');
+    started = true;
 
+    if (SPECIAL_ACTIVE) { // don’t start while special poem is live
+      __windsSongRunInProgress = false;
+      return;
+    }
+
+    poemStatus.set('playing'); // => butterflies RED
+    const windVal  = Number(window.__WINDS_SONG__.wind) || 5;
+    const windFact = Math.max(0.1, windVal/5);
+
+    // Drift duration per line scales with wind (faster wind => shorter time)
+    const driftMs  = Math.max(1500, Math.round(CFG.poem.baseDriftDurationMs / windFact));
+
+    // Derive inter-line spawn so the “visual gap” feels constant across speeds.
+    // If drift gets shorter, we lengthen the time between spawns to compensate.
+    const baselineWind = 5;
+    const baselineDrift = CFG.poem.baseDriftDurationMs; // at Wind=5
+    // keep gap proportional to drift duration
+    const gapMs = Math.max(1000, Math.round(CFG.poem.targetVisualGapS * 1000 * (driftMs / baselineDrift)));
+
+    // Spawn each line; record when the LAST one will fully exit for reveal timing
+    let lastExit = 0;
     for (let i=0;i<CFG.poem.lines.length;i++){
-      // Wind: 5 = baseline → factor = wind/5
-      const windVal   = Number(window.__WINDS_SONG__.wind) || 5;
-      const windFact  = Math.max(0.1, windVal/5);
-      const driftMs   = Math.max(1000, Math.round(CFG.poem.baseDriftDurationMs / windFact));
+      const startAt = performance.now();
+      const exitAt  = startAt + driftMs;
+      if (i === CFG.poem.lines.length - 1) lastExit = exitAt;
+
       spawnDriftingLine(CFG.poem.lines[i], driftMs);
-
       if (i < CFG.poem.lines.length - 1){
-        // Breath in seconds, live each gap (this controls *line spacing timing*)
-        const breathS = Number(window.__WINDS_SONG__.breath) || 16;
-        await wait(Math.max(500, Math.round(breathS*1000)));
+        await wait(gapMs); // spacing independent of Breath now
+        if (SPECIAL_ACTIVE) { // abort mid-cycle if special begins
+          poemStatus.set('waiting');
+          __windsSongRunInProgress = false;
+          return;
+        }
       }
     }
 
-    // Skip bottom reveal if special is active OR this cycle was marked to suppress
-    if (CFG.reveal.enabled && !specialActive && !suppressRevealThisCycle){
-      // guard a possible pending reveal so it can be cancelled by special start
-      currentReveal = { barEl: null, cancelled:false };
-      // wait the configured delay before reveal (still cancelable)
-      const waitMs = CFG.reveal.appearAfterLastLineMs;
-      const until = performance.now() + waitMs;
-      while (performance.now() < until) {
-        if (currentReveal.cancelled) break;
-        await wait(50);
-      }
-      if (!currentReveal.cancelled) {
-        await runRevealSequence(); // Elegra pacing inside; will set barEl internally
-      }
-      currentReveal = null;
+    __lastLineExitAt = lastExit;
+
+    // Start bottom reveal ONLY after the last line has actually left the screen
+    const waitUntil = Math.max(0, (__lastLineExitAt + CFG.reveal.appearCushionMs) - performance.now());
+    await wait(waitUntil);
+
+    if (!SPECIAL_ACTIVE && !__revealCancelled) {
+      await runRevealSequence(); // Elegra slider ignored here; fixed timing used
     }
 
-    poemStatus.set('done');
-  }catch(e){ console.error('Poem drift error:', e); poemStatus.set('warn'); }
-  finally{ __windsSongRunInProgress=false; }
+    poemStatus.set('done'); // => butterflies GREEN, ambient palette enabled
+  }catch(e){
+    console.error('Poem drift error:', e);
+    poemStatus.set('warn');
+  }finally{
+    __windsSongRunInProgress = false;
+  }
 }
 
 function spawnDriftingLine(text, driftDurationMs){
@@ -210,6 +273,7 @@ function spawnDriftingLine(text, driftDurationMs){
     const k = clamp((t-t0)/driftDurationMs,0,1);
     const x = startX + (endX - startX)*k;
     el.style.transform = `translate(${x}px,0)`;
+    // earlier fade-in, smooth fade-out
     const fadeIn = Math.min(1, k/0.20), fadeOut = Math.min(1, (1-k)/0.20);
     el.style.opacity = String(peak * Math.min(fadeIn, fadeOut));
     if (k<1) requestAnimationFrame(step); else el.remove();
@@ -217,85 +281,114 @@ function spawnDriftingLine(text, driftDurationMs){
   requestAnimationFrame(step);
 }
 
-/* Bottom reveal (Elegra per phase) */
+/* --------------------------
+   Bottom reveal (fixed pacing, correct spacing)
+--------------------------- */
+let __revealBar = null;
+function cancelBottomReveal(){
+  __revealCancelled = true;
+  if (__revealBar){
+    __revealBar.style.opacity = '0';
+    setTimeout(()=>{ __revealBar?.remove(); __revealBar = null; }, 500);
+  }
+}
+
 async function runRevealSequence(){
-  // If a special started during the delay, refuse to reveal
-  if (specialActive || suppressRevealThisCycle) return;
+  // Build bar
+  const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
+  __revealBar = bar;
 
-  const elegraS = Number(window.__WINDS_SONG__.elegra) || 15;
-  const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
-  const half = 0.5 * pairTotalMs;
-
-  const bar = document.createElement('div'); bar.className='env-reveal-bar';
-  revealLayer.appendChild(bar);
-  if (currentReveal) currentReveal.barEl = bar; // allow cancellation handler to see it
-
+  // Words with preserved spaces (ALWAYS)
   const lines = CFG.poem.lines.map(line=>{
     const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
     const words = line.split(' ').map((w,i,arr)=>{
       const s=document.createElement('span'); s.className='env-reveal-word';
-      // PERMANENT spacing fix:
-      s.textContent = (i < arr.length - 1) ? (w + ' ') : w;
-      lineEl.appendChild(s); return s;
+      s.textContent = (i<arr.length-1) ? (w+' ') : w; lineEl.appendChild(s); return s;
     });
     bar.appendChild(lineEl); return { lineEl, words };
   });
 
+  // Fade bar in
   bar.style.display='block';
+  await wait(20);
+  bar.style.opacity='1';
 
-  await revealWords(lines[0].words, half);
-  if (specialActive) { gracefulRemoveReveal(bar); return; }
-  await crossoverFade(lines[0].words, lines[1].words, half);
+  // Two-line phases, slow & smooth (Elegra slider NOT applied)
+  const halfPhase = CFG.reveal.pairPhaseMs; // one line fade-in; one crossover step uses per-word pacing
 
-  if (specialActive) { gracefulRemoveReveal(bar); return; }
-  await crossoverFade(lines[1].words, lines[2].words, half);
+  await revealWords(lines[0].words, halfPhase);
+  await crossoverFade(lines[0].words, lines[1].words, halfPhase);
 
-  if (specialActive) { gracefulRemoveReveal(bar); return; }
-  await crossoverFade(lines[2].words, lines[3].words, half);
+  await crossoverFade(lines[1].words, lines[2].words, halfPhase);
+  await crossoverFade(lines[2].words, lines[3].words, halfPhase);
 
-  if (specialActive) { gracefulRemoveReveal(bar); return; }
-  await fadeWords(lines[3].words, half);
+  await fadeWords(lines[3].words, halfPhase);
 
-  gracefulRemoveReveal(bar);
+  // Fade bar out smoothly
+  bar.style.opacity='0';
+  await wait(600);
+  bar.remove();
+  __revealBar = null;
 }
 
-function gracefulRemoveReveal(bar){
-  if (!bar) return;
-  bar.style.transition = 'opacity 500ms ease';
-  bar.style.opacity = '0';
-  setTimeout(()=>{ try{ bar.remove(); }catch{} }, 520);
-}
-
-async function revealWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+async function revealWords(words,totalMs){
+  const per=Math.max(60, totalMs/Math.max(1,words.length));
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='1'; w.style.transform='translateY(0px)'; await wait(per); } }
+    w.style.opacity='1'; w.style.transform='translateY(0px)';
+    await wait(per);
+  }
+}
 async function crossoverFade(outgoing,incoming,totalMs){
-  const steps=Math.max(outgoing.length,incoming.length), per=totalMs/Math.max(1,steps);
+  const steps=Math.max(outgoing.length,incoming.length);
+  const per=Math.max(60, totalMs/Math.max(1,steps));
   for(let i=0;i<steps;i++){
     if(i<incoming.length){ const w=incoming[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='1'; w.style.transform='translateY(0px)'; }
     if(i<outgoing.length){ const w=outgoing[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='0'; w.style.transform='translateY(4px)'; }
     await wait(per);
-  } }
-async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+  }
+}
+async function fadeWords(words,totalMs){
+  const per=Math.max(60, totalMs/Math.max(1,words.length));
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
+    w.style.opacity='0'; w.style.transform='translateY(4px)';
+    await wait(per);
+  }
+}
 
-/* Butterfly (Wind applied per flight) */
+/* --------------------------
+   Butterflies (oscillation via Breath, proximity dance)
+--------------------------- */
+const ACTIVE_BUTTERFLIES = new Set();
+const PAGE_LOAD_T0 = performance.now();
+
+function currentButterflyTint(){
+  switch (poemStatus.state) {
+    case 'playing': return CFG.butterflies.tint.playing; // RED
+    case 'done':    return CFG.butterflies.tint.done;    // GREEN
+    case 'warn':    return CFG.butterflies.tint.warn;    // RED (warn)
+    default:        return CFG.butterflies.tint.waiting; // YELLOW
+  }
+}
+function ambientTint(){
+  // after poem done, allow a wider palette
+  if (poemStatus.state === 'done') {
+    return CFG.butterflies.paletteAmbient[randi(0, CFG.butterflies.paletteAmbient.length-1)];
+  }
+  return currentButterflyTint();
+}
+
 function spawnButterfly(){
   const windVal = Number(window.__WINDS_SONG__.wind) || 5;
   const windFact= Math.max(0.1, windVal/5);
 
   const size=randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
-  const tint=(()=>{switch(poemStatus.state){
-    case 'playing': return CFG.butterflies.tint.playing; // red during poem
-    case 'done':    return CFG.butterflies.tint.done;    // green after poem
-    case 'warn':    return CFG.butterflies.tint.warn;
-    default:        return CFG.butterflies.tint.waiting; // yellow at load
-  }})();
+  const tint=ambientTint();
 
   const el=document.createElement('div');
   Object.assign(el.style,{position:'absolute',top:`${randi(40, Math.max(120, window.innerHeight/2))}px`,
@@ -316,26 +409,94 @@ function spawnButterfly(){
   const fromLeft=Math.random()<0.5;
   const startX=fromLeft?-40:(window.innerWidth+40);
   const endX  =fromLeft?(window.innerWidth+40):-40;
-  const baseTop=parseFloat(el.style.top);
 
+  const baseTop=randi(40, Math.max(120, window.innerHeight/2));
   const base=randi(CFG.butterflies.baseTravelMsMin, CFG.butterflies.baseTravelMsMax);
   const travelMs=Math.max(800, Math.round(base/ windFact));
   const t0=performance.now();
 
-  function anim(t){
+  // Breath → oscillation (map 6..30 to amplitude/frequency multipliers)
+  const breath = clamp(Number(window.__WINDS_SONG__.breath)||16, 6, 30);
+  const ampMul = 0.6 + (breath-6) / (30-6);        // ~0.6 .. 1.0
+  const freqMul= 0.8 + (breath-6) / (30-6) * 0.6;  // ~0.8 .. 1.4
+
+  const waves = CFG.butterflies.flutterWavesBase * freqMul;
+  const amp   = CFG.butterflies.flutterAmpBase * ampMul;
+
+  const node = { el, radius: CFG.butterflies.interactRadius, inDance:false, vx:0, vy:0 };
+  ACTIVE_BUTTERFLIES.add(node);
+
+  function normalAnim(t){
     const k=clamp((t-t0)/travelMs,0,1);
     const x=startX + (endX-startX)*k;
-    const y=baseTop + Math.sin(k*Math.PI*CFG.butterflies.flutterWaves)*CFG.butterflies.flutterAmp;
-    el.style.transform=`translate(${x}px, ${y-baseTop}px)`;
-    if(k<1) requestAnimationFrame(anim); else el.remove();
+    const y=baseTop + Math.sin(k*Math.PI*waves)*amp;
+    el.style.transform=`translate(${x}px, ${y-0}px)`;
+
+    // Proximity check (only if not dancing)
+    if (!node.inDance) tryProximityDance(node, x, y);
+
+    if(k<1 && !node.inDance) requestAnimationFrame(normalAnim);
+    else if (!node.inDance) { el.remove(); ACTIVE_BUTTERFLIES.delete(node); }
   }
-  requestAnimationFrame(anim);
-}
-async function runButterfliesLoop(){
-  await wait(randi(6_000,14_000)); spawnButterfly();
-  while(true){ await wait(randi(60_000,90_000)); spawnButterfly(); }
+  requestAnimationFrame(normalAnim);
+
+  // Dance controller attaches by flipping node.inDance and animating in orbit
+  node.startDance = (mateX, mateY, durationMs=7000) => {
+    node.inDance = true;
+    const d0 = performance.now();
+    const rOrbit = 26 + Math.random()*10;
+    function danceStep(tt){
+      const u = clamp((tt-d0)/durationMs, 0, 1);
+      const angle = u * Math.PI * 4; // 2 full orbits
+      const dx = Math.cos(angle)*rOrbit, dy = Math.sin(angle)*rOrbit;
+      el.style.transform = `translate(${mateX+dx}px, ${mateY+dy}px)`;
+      if (u<1) requestAnimationFrame(danceStep);
+      else { // resume normal by removing gracefully
+        el.remove(); ACTIVE_BUTTERFLIES.delete(node);
+      }
+    }
+    requestAnimationFrame(danceStep);
+  };
+
+  return node;
 }
 
-/* Orchestrate */
+function tryProximityDance(selfNode, x, y){
+  const now = performance.now();
+  const boost = (now - PAGE_LOAD_T0) < CFG.butterflies.interactBoostWindowMs;
+  const p = boost ? CFG.butterflies.interactBoostProb : CFG.butterflies.interactBaseProb;
+
+  for (const other of ACTIVE_BUTTERFLIES){
+    if (other === selfNode || other.inDance) continue;
+    const mat = other.el.getBoundingClientRect();
+    const my  = { x, y };
+    const ox  = mat.left, oy = mat.top;
+    const dx = ox - my.x, dy = oy - my.y;
+    const d2 = dx*dx + dy*dy;
+    const R  = Math.max(selfNode.radius, other.radius);
+    if (d2 <= R*R && Math.random() < p){
+      // Choose a midpoint and start both orbits
+      const cx = my.x + dx*0.5;
+      const cy = my.y + dy*0.5;
+      const dur = 6000 + Math.random()*3000;
+      selfNode.startDance(cx, cy, dur);
+      other.startDance(cx, cy, dur);
+      break;
+    }
+  }
+}
+
+async function runButterfliesLoop(){
+  await wait(randi(6_000,14_000)); spawnButterfly();
+  while(true){
+    // cadence unchanged; speed changes via Wind, oscillation via Breath
+    await wait(randi(60_000,90_000));
+    spawnButterfly();
+  }
+}
+
+/* --------------------------
+   Orchestrate
+--------------------------- */
 async function main(){ runPoemDrift(); runButterfliesLoop(); }
 main();
