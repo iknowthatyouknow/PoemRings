@@ -1,20 +1,27 @@
-// windsong-controller.js
+// windsong-controller.js (final)
+// - Keeps UI visuals/placement; “Wind Song” title with a space.
+// - Apply closes the panel. No “Trigger now” button.
+// - Wind posts factor to environment.html (leaves speed).
+// - Breath now controls butterfly oscillation only (help text updated).
+// - Elegra slider kept visually but no longer changes reveal pacing.
+// - Rez scheduler (x>1) aligned to top-of-hour grid; deferred during special poem.
+
 (function () {
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
-  function clampN(v, min, max, def) { v = Number(v); return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def; }
+  function clampN(v, min, max, def){ v=Number(v); return Number.isFinite(v)?Math.max(min,Math.min(max,v)):def; }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
         wind:   clampN(s.wind,   1, 10, 5),
         breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15),
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI; ignored by reveal
         rez:    clampN(s.rez,    1,   6,  1),
       };
     } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
-  function saveSettings(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+  function saveSettings(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
@@ -24,13 +31,13 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // keep environment.html in sync for leaf/wind speed
+  // Inform environment.html (leaves) about current wind multiplier
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (unchanged visuals) ----------
+  // ---------- Minimal styles (unchanged visuals; reposition under About) ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; right:14px; top:64px; z-index:9998;
+      position:fixed; right:14px; top:64px; z-index:9998; /* under the 3-dot area */
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
@@ -69,25 +76,53 @@
     }
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
+    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  const activator = buildActivator(openPanel);
-  document.body.appendChild(activator);
+  // Try attaching an item in an existing nav (kept, but we rely on activator button)
+  const menuInserted = tryAttachMenuItem(openPanel);
+  if (!menuInserted) {
+    const activator = buildActivator(openPanel);
+    document.body.appendChild(activator);
+  }
 
-  // ---------- Special-poem coordination with Rez ----------
-  let specialActive = false;
-  window.addEventListener('special-poem:begin', () => { specialActive = true; });
-  window.addEventListener('special-poem:end',   () => { specialActive = false; });
+  // ---------- Rez scheduler (x>1) aligned to hour grid ----------
+  let SCHED = null;
+  setupRezScheduler(settings.rez);
 
-  // Rez scheduler aligned to top-of-hour minutes grid, but suppressed during special
-  startRezScheduler(() => {
-    if (specialActive) return;                 // defer if special is running
-    window.dispatchEvent(new Event('windsong:trigger'));
+  function setupRezScheduler(rez){
+    if (SCHED) { clearInterval(SCHED); SCHED = null; }
+    if (rez <= 1) return; // once per refresh only
+    const intervalMin = 60 / rez; // e.g., 30m, 20m, 15m, 12m, 10m
+    SCHED = setInterval(() => {
+      if (document.hidden) return;          // don't spam if backgrounded
+      if (window.__SPECIAL_ACTIVE__) return; // controller-side hint (optional)
+      // Align to minute grid: trigger when minute % interval == 0 and seconds near 0..5
+      const now = new Date();
+      const min = now.getMinutes();
+      const sec = now.getSeconds();
+      if (min % intervalMin === 0 && sec < 6) {
+        // Defer if special poem is active (environment also suppresses)
+        if (!window.__SPECIAL_ACTIVE__) {
+          window.dispatchEvent(new Event('windsong:trigger'));
+        }
+      }
+    }, 1000);
+  }
+
+  // Update scheduler when Rez changes
+  window.addEventListener('windsong:update', (e)=>{
+    const { rez } = e.detail || {};
+    if (rez != null) setupRezScheduler(Number(rez));
   });
+
+  // Allow index.js to signal special poem status (optional helper)
+  window.addEventListener('special-poem:begin', ()=>{ window.__SPECIAL_ACTIVE__ = true; });
+  window.addEventListener('special-poem:end',   ()=>{ window.__SPECIAL_ACTIVE__ = false; });
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
@@ -141,8 +176,7 @@
       </div>
 
       <div class="ws-help">
-        Breath = seconds between drifting lines. Elegra = reveal pacing (seconds).
-        Rez = times per hour (1 = once per refresh).
+        Wind = global motion speed. Breath = butterfly flight oscillation. Elegra = (visual only; reveal speed fixed). Rez = times per hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
@@ -179,13 +213,15 @@
     elegra.addEventListener('input', syncVals);
     rez.addEventListener('input', syncVals);
 
+    // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
+    // Apply button: save, broadcast, post wind to iframe, close
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
         breath: clampN(breath.value, 6, 30, 16),
-        elegra: clampN(elegra.value, 8, 30, 15),
+        elegra: clampN(elegra.value, 8, 30, 15), // stored but not used by reveal
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
@@ -199,15 +235,19 @@
 
   function onApply(next) {
     saveSettings(next);
-
+    // Update shared state for environment.js (drift, butterflies, reveal suppression honored there)
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
+    // Dispatch app-wide event (environment.js listens)
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
+
+    // Inform background iframe (environment.html) about wind speed for leaves
     postWindToEnvironment(next.wind);
 
+    // Close panel
     onExit();
   }
 
@@ -220,34 +260,12 @@
     return b;
   }
 
-  function startRezScheduler(triggerFn){
-    // Clear any existing
-    if (window.__WS_REZ_INTERVAL__) clearInterval(window.__WS_REZ_INTERVAL__);
-    if (window.__WS_REZ_TIMEOUT__)  clearTimeout(window.__WS_REZ_TIMEOUT__);
-
-    const rez = Number(window.__WINDS_SONG__.rez) || 1;
-    if (rez <= 1) return; // once per refresh, no hourly schedule
-
-    // Align to top-of-hour grid: every (60/rez) minutes at minute marks
-    const intervalMin = Math.max(1, Math.floor(60/rez));
-    function msToNextTick(){
-      const now = new Date();
-      const minutes = now.getMinutes();
-      const nextMinuteMark = Math.ceil((minutes+0.0001)/intervalMin)*intervalMin;
-      const hour = now.getHours();
-      const next = new Date(now);
-      if (nextMinuteMark >= 60) { next.setHours(hour+1, 0, 0, 0); }
-      else                      { next.setMinutes(nextMinuteMark, 0, 0); }
-      return next - now;
-    }
-
-    function schedule(){
-      window.__WS_REZ_TIMEOUT__ = setTimeout(()=>{
-        triggerFn(); // will be ignored if specialActive in our guard above
-        window.__WS_REZ_INTERVAL__ = setInterval(triggerFn, intervalMin*60*1000);
-      }, msToNextTick());
-    }
-    schedule();
+  function tryAttachMenuItem(openFn) {
+    // Leave About menu alone; we still try common navs in case you want it there in future
+    const menu = document.querySelector('.menu, nav, .nav, #menu, .site-menu, .wrap .menu');
+    if (!menu) return false;
+    // We’re NOT inserting inside the dots menu per ruleset preference.
+    return false;
   }
 
   function postWindToEnvironment(windVal) {
@@ -260,42 +278,32 @@
   function injectCSS(text) { const tag = document.createElement('style'); tag.textContent = text; document.head.appendChild(tag); }
 
   // ---------- SVG icons ----------
-  function svgWind() {
-    return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M3 8c4 0 6-2 9-2 2.5 0 3.5 1.5 3.5 2.8 0 1.2-1 2.2-2.3 2.2" />
-        <path d="M3 12h10c2 0 3-1 3-2.2C16 8.5 15 7 12.5 7" />
-        <path d="M3 16c5 0 8-2 12-2 2 0 3 1.2 3 2.2 0 1.2-1 2.8-3.2 2.8" />
-        <path d="M6 9c.8-.6 1.5-1.2 2.2-1.8" />
-      </svg>`;
-  }
-  function svgBreath() {
-    return `
-      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="2" y="4" width="18" height="16" rx="2" />
-        <rect x="44" y="4" width="18" height="16" rx="2" />
-        <path d="M22 12h20" />
-        <path d="M28 8l-6 4 6 4" />
-        <path d="M36 8l6 4-6 4" />
-      </svg>`;
-  }
-  function svgElegra() {
-    return `
-      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-        <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
-      </svg>`;
-  }
-  function svgClock() {
-    return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9"></circle>
-        <path d="M12 7v5l3 2"></path>
-      </svg>`;
-  }
-  function svgClose() {
-    return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M18 6L6 18M6 6l12 12"></path>
-      </svg>`;
-  }
+  function svgWind(){return `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 8c4 0 6-2 9-2 2.5 0 3.5 1.5 3.5 2.8 0 1.2-1 2.2-2.3 2.2" />
+      <path d="M3 12h10c2 0 3-1 3-2.2C16 8.5 15 7 12.5 7" />
+      <path d="M3 16c5 0 8-2 12-2 2 0 3 1.2 3 2.2 0 1.2-1 2.8-3.2 2.8" />
+      <path d="M6 9c.8-.6 1.5-1.2 2.2-1.8" />
+    </svg>`;}
+  function svgBreath(){return `
+    <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="2" y="4" width="18" height="16" rx="2" />
+      <rect x="44" y="4" width="18" height="16" rx="2" />
+      <path d="M22 12h20" />
+      <path d="M28 8l-6 4 6 4" />
+      <path d="M36 8l6 4-6 4" />
+    </svg>`;}
+  function svgElegra(){return `
+    <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+      <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
+    </svg>`;}
+  function svgClock(){return `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"></circle>
+      <path d="M12 7v5l3 2"></path>
+    </svg>`;}
+  function svgClose(){return `
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18 6L6 18M6 6l12 12"></path>
+    </svg>`;}
 })();
