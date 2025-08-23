@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Environment</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   html, body { height: 100%; margin: 0; background: transparent; }
   canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
@@ -16,6 +16,7 @@
   const canvas = document.getElementById('env');
   const ctx = canvas.getContext('2d');
 
+  // --- DPI-safe resize ---
   function resize(){
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -26,22 +27,17 @@
   new ResizeObserver(resize).observe(canvas);
   resize();
 
-  // === WIND multiplier (5 = baseline) ===
-  let WIND_SLIDER = 5;                  // receives 1..10
- // Default factor = 1.0 (baseline)
-  let WIND_FACTOR = 1.0;
-  
-  // Listen for wind changes from the top document
+  // --- Wind factor (5 = baseline => factor 1.0) ---
+  let WIND_FACTOR = 1.0; // updated via postMessage from windsong-controller.js
   window.addEventListener('message', (ev) => {
     const msg = ev.data || {};
     if (msg && msg.type === 'WIND_UPDATE') {
-      const wind = Number(msg.wind) || 5;         // 1..10
-      WIND_FACTOR = Math.max(0.1, wind / 5);      // 5 => 1.0 (baseline)
+      const wind = Number(msg.wind) || 5;          // slider 1..10
+      WIND_FACTOR = Math.max(0.1, wind / 5);       // 5 -> 1.0 (baseline)
     }
-  });
+  }, false);
 
-
-  // Gentle wind lines + floating leaves (very subtle)
+  // --- Scene setup (unchanged visuals) ---
   const STREAMS = 16, LEAVES = 48;
   const LINE = 'rgba(173,190,230,0.08)';
   const LEAF_STROKE = 'rgba(200,220,255,0.28)';
@@ -50,23 +46,32 @@
   const wrap01 = v => v < -0.2 ? v+1.4 : (v > 1.2 ? v-1.4 : v);
 
   const lines = Array.from({length: STREAMS}, () => ({
-    x:R(-0.1,1.1), y:R(0,1), len:R(0.25,0.55), amp:R(10,26), phase:R(0,Math.PI*2), th:R(0.7,1.2)
-  }));
-  const leaves = Array.from({length: LEAVES}, () => ({
-    x:R(-0.15,1.15), y:R(-0.05,1.05), s:R(6,12), rot:R(0,Math.PI*2),
-    spin:R(-0.002,0.002), driftY:R(-0.03,0.03), phase:R(0,Math.PI*2)
+    x:R(-0.1,1.1), y:R(0,1), len:R(0.25,0.55),
+    amp:R(10,26), phase:R(0,Math.PI*2), th:R(0.7,1.2)
   }));
 
+  const leaves = Array.from({length: LEAVES}, () => ({
+    x:R(-0.15,1.15), y:R(-0.05,1.05), s:R(6,12),
+    rot:R(0,Math.PI*2), spin:R(-0.002,0.002),
+    driftY:R(-0.03,0.03), phase:R(0,Math.PI*2)
+  }));
+
+  // --- Stable timestep; no speed drift over time ---
   let last = performance.now();
   function tick(now){
-    const dt = Math.min(60, now - last); last = now;
+    let dt = now - last;
+    // clamp dt to avoid jumps on tab switch
+    dt = Math.max(0, Math.min(60, dt));
+    last = now;
+
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const W = canvas.clientWidth, H = canvas.clientHeight;
 
     // wind lines
-    ctx.lineCap = 'round'; ctx.strokeStyle = LINE;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = LINE;
     for (const ln of lines){
-      ln.x = wrap01(ln.x + dt * 0.00003 * WIND_FACTOR);   // ← factor applied
+      ln.x = wrap01(ln.x + dt * 0.00003 * WIND_FACTOR);
       const x0 = ln.x * W, y0 = ln.y * H, pxLen = ln.len * W;
       ctx.lineWidth = ln.th;
       ctx.beginPath();
@@ -81,20 +86,31 @@
     }
 
     // leaves
-    ctx.lineWidth = 1; ctx.strokeStyle = LEAF_STROKE; ctx.fillStyle = LEAF_FILL;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = LEAF_STROKE;
+    ctx.fillStyle = LEAF_FILL;
     for (const leaf of leaves){
-      leaf.x = wrap01(leaf.x + (dt*0.000045 * WIND_FACTOR) + Math.sin(now*0.00026 + leaf.phase)*0.00002);
-      leaf.y = wrap01(leaf.y + leaf.driftY*(dt*0.00003 * WIND_FACTOR) + Math.cos(now*0.00020 + leaf.phase)*0.000035);
+      leaf.x   = wrap01(leaf.x + (dt*0.000045 * WIND_FACTOR)
+                        + Math.sin(now*0.00026 + leaf.phase)*0.00002);
+      leaf.y   = wrap01(leaf.y + leaf.driftY*(dt*0.00003 * WIND_FACTOR)
+                        + Math.cos(now*0.00020 + leaf.phase)*0.000035);
       leaf.rot += leaf.spin * dt * 0.7 * WIND_FACTOR;
 
       const cx = leaf.x * W, cy = leaf.y * H, s = leaf.s;
-      ctx.save(); ctx.translate(cx,cy); ctx.rotate(leaf.rot);
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(leaf.rot);
       ctx.beginPath();
       ctx.moveTo(0, -s*0.6);
       ctx.quadraticCurveTo(s*0.55, -s*0.15, 0, s*0.7);
       ctx.quadraticCurveTo(-s*0.55, -s*0.15, 0, -s*0.6);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0,-s*0.45); ctx.quadraticCurveTo(0,s*0.1,0,s*0.55); ctx.stroke();
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0,-s*0.45);
+      ctx.quadraticCurveTo(0,s*0.1,0,s*0.55);
+      ctx.stroke();
       ctx.restore();
     }
 
