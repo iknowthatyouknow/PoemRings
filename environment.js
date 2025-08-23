@@ -3,8 +3,8 @@
    - No index.html changes; visuals unchanged
    - Reads Wind/Breath/Elegra live so adjustments take effect mid-session
    - 5 on the Wind slider = current baseline speed
-   - CHANGE: final reveal now waits for the last drifting line to finish,
-             THEN waits +30s (CFG.reveal.appearAfterLastLineMs) before starting.
+   - Final reveal waits for last drifting line to finish, THEN +30s before starting
+   - FINAL SPACING FIX: spacing handled by CSS (inline-flex + gap), not text spaces
    ======================================================================== */
 
 /* Utils */
@@ -55,7 +55,7 @@ const CFG = {
   },
   reveal: {
     enabled: true,
-    appearAfterLastLineMs: 30_000,      // << still 30s, but now counted AFTER last line fully exits
+    appearAfterLastLineMs: 30_000,      // counted AFTER last line fully exits
     rowPadding: 10, fontSizePx: 16,
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
     border: '1px solid rgba(255,255,255,.08)'
@@ -104,25 +104,40 @@ const revealLayer = (() => {
   return el;
 })();
 
-/* Styles */
+/* Styles (SPACING FIX: inline-flex + gap + fallback margin-left) */
 (()=>{ const css = `
   .env-poem-line{position:absolute;white-space:nowrap;color:${CFG.colors.poemLine};
     text-shadow:0 1px 3px ${CFG.colors.poemShadow};opacity:.95;font-weight:600;letter-spacing:.2px;
     user-select:none;will-change:transform,opacity;pointer-events:none;}
+
   .env-reveal-bar{max-width:980px;width:calc(100vw - 24px);margin:0 12px 10px;
     background:${CFG.reveal.barBg};border:${CFG.reveal.border};border-radius:10px;
     padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
     font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
-  .env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1;}
-  .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
+
+  /* Each line lays out words with a fixed visual gap, independent of text spaces */
+  .env-reveal-line{
+    display:inline-flex;
+    flex-wrap:nowrap;
+    align-items:baseline;
+    gap:.45ch;                /* primary spacing mechanism */
+    white-space:nowrap;
+    opacity:1;
+  }
+  .env-reveal-word{
+    display:inline-block;
+    opacity:0;
+    will-change:opacity,transform;
+    transform:translateY(4px);
+  }
+  /* Fallback spacing for engines without flex-gap support */
+  .env-reveal-word + .env-reveal-word { margin-left:.45ch; }
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
 /* Status */
 const poemStatus = { state:'waiting', set(next){ this.state = next; } };
 
-/* Poem drift (live knobs applied per line)
-   IMPORTANT CHANGE: we now WAIT for the last drift line’s animation to COMPLETE
-   before starting the +30s timer for the bottom reveal. */
+/* Poem drift (live knobs applied per line; waits for last line completion) */
 let __windsSongRunInProgress = false;
 async function runPoemDrift(){
   if (__windsSongRunInProgress) return;
@@ -138,28 +153,23 @@ async function runPoemDrift(){
     let lastLinePromise = null;
 
     for (let i=0;i<CFG.poem.lines.length;i++){
-      // Wind: 5 = baseline → factor = wind/5
       const windVal   = Number(window.__WINDS_SONG__.wind) || 5;
       const windFact  = Math.max(0.1, windVal/5);
       const driftMs   = Math.max(1000, Math.round(CFG.poem.baseDriftDurationMs / windFact));
 
-      // spawn returns a promise that resolves when this line is fully off-screen
       const p = spawnDriftingLine(CFG.poem.lines[i], driftMs);
       lastLinePromise = p;
 
       if (i < CFG.poem.lines.length - 1){
-        // Breath in seconds, uniform gap (distance ratio held by driftMs)
         const breathS = Number(window.__WINDS_SONG__.breath) || 16;
         await wait(Math.max(500, Math.round(breathS*1000)));
       }
     }
 
-    // >>> NEW: wait until the LAST drifting line actually finishes (exits the screen)
-    if (lastLinePromise) {
-      await lastLinePromise;
-    }
+    // Wait until the last line actually exits the screen
+    if (lastLinePromise) await lastLinePromise;
 
-    // Then, and only then, wait the configured +30s and start the bottom reveal
+    // Then wait +30s and start bottom reveal
     if (CFG.reveal.enabled){
       await wait(CFG.reveal.appearAfterLastLineMs);
       await runRevealSequence();
@@ -169,7 +179,7 @@ async function runPoemDrift(){
   finally{ __windsSongRunInProgress=false; }
 }
 
-/* spawnDriftingLine now RETURNS a Promise that resolves when the line is removed */
+/* A drifting line that resolves when removed */
 function spawnDriftingLine(text, driftDurationMs){
   return new Promise((resolve)=>{
     const el = document.createElement('div');
@@ -195,23 +205,25 @@ function spawnDriftingLine(text, driftDurationMs){
   });
 }
 
-/* Bottom reveal */
+/* Bottom reveal (SPACING FIX APPLIED) */
 async function runRevealSequence(){
-  const elegraS = Number(window.__WINDS_SONG__.elegra) || 15; // (kept as-is, per rules)
+  const elegraS = Number(window.__WINDS_SONG__.elegra) || 15;
   const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
   const half = 0.5 * pairTotalMs;
 
   const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
+
   const lines = CFG.poem.lines.map(line=>{
     const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
-    const words = line.split(' ').map((w,i,arr)=>{
+    const words = line.split(' ').map((w)=>{
       const s=document.createElement('span'); s.className='env-reveal-word';
-      // ALWAYS preserve spacing between words:
-      s.textContent = (i<arr.length-1) ? (w+' ') : w;
+      // Do NOT append spaces; CSS handles spacing (gap/margin-left)
+      s.textContent = w;
       lineEl.appendChild(s); return s;
     });
     bar.appendChild(lineEl); return { lineEl, words };
   });
+
   bar.style.display='block';
 
   await revealWords(lines[0].words, half);
@@ -240,7 +252,7 @@ async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.leng
     w.style.transition='opacity 600ms ease, transform 600ms ease';
     w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
 
-/* Butterfly (Wind applied per flight) */
+/* Butterfly (unchanged from prior correct version) */
 function spawnButterfly(){
   const windVal = Number(window.__WINDS_SONG__.wind) || 5;
   const windFact= Math.max(0.1, windVal/5);
