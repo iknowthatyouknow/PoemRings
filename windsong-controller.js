@@ -1,44 +1,37 @@
 // windsong-controller.js
 (function () {
-  // ---------- Guard: run once ----------
-  if (window.__WINDS_SONG_CTL__) return;
-  window.__WINDS_SONG_CTL__ = true;
-
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
-  function clampN(v, min, max, def) {
-    v = Number(v);
-    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
-  }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
         wind:   clampN(s.wind,   1, 10, 5),
-        breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15), // kept for state (reveal uses fixed pacing)
+        breath: clampN(s.breath, 0,  100, 20), // breath = butterfly oscillation (amplitude), NOT poem spacing
+        elegra: clampN(s.elegra, 8,  30, 15),
         rez:    clampN(s.rez,    1,   6,  1),
       };
-    } catch {
-      return { wind:5, breath:16, elegra:15, rez:1 };
-    }
+    } catch { return { wind:5, breath:20, elegra:15, rez:1 }; }
   }
   function saveSettings(s) {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  }
+  function clampN(v, min, max, def) {
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
   }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
   window.__WINDS_SONG__ = window.__WINDS_SONG__ || {};
   if (window.__WINDS_SONG__.wind   == null) window.__WINDS_SONG__.wind   = settings.wind;
-  if (window.__WINDS_SONG__.breath == null) window.__WINDS_SONG__.breath = settings.breath;
+  if (window.__WINDS_SONG__.breath == null) window.__WINDS_SONG__.breath = settings.breath; // oscillation
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Tell the background iframe (environment.html) about current wind on load
   postWindToEnvironment(settings.wind);
 
-  // ---------- Styles (unchanged look) ----------
+  // ---------- Minimal styles (unchanged look) ----------
   injectCSS(`
     .ws-activator{
       position:fixed; z-index:9998;
@@ -50,12 +43,14 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; z-index:9999; display:none;
+      position:fixed; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
-      padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      padding:12px 12px 10px; color:#fff;
+      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
+      display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
@@ -76,95 +71,27 @@
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
       flex:1; text-align:center; padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none;
-      background:rgba(141,198,255,.22); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
+      background:rgba(141,198,255,.12); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
     }
+    .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
   `);
 
-  // ---------- Init on DOM ready (robust) ----------
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
+  // ---------- Build UI ----------
+  const panel = buildPanel(settings, onApply, onExit);
+  document.body.appendChild(panel);
 
-  function init() {
-    try {
-      const panel = buildPanel(settings, onApply, onExit);
-      document.body.appendChild(panel);
+  // Always use floating activator; place it a few px under the 3-dot menu (top-right)
+  const activator = buildActivator(openPanel);
+  document.body.appendChild(activator);
+  positionActivatorNearThreeDots(activator);
+  window.addEventListener('resize', () => positionActivatorNearThreeDots(activator));
 
-      const activator = buildActivator(() => openPanel(panel, activator));
-      document.body.appendChild(activator);
-
-      // Place activator a few px under the three‑dot menu (if visible), else bottom-right
-      positionActivatorUnderThreeDots(activator);
-
-      // Reposition on resize (menu can move)
-      window.addEventListener('resize', () => positionActivatorUnderThreeDots(activator));
-
-      // Close on ESC
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') onExit(panel);
-      });
-    } catch (err) {
-      console.error('[windsong-controller] init error:', err);
-    }
-  }
-
-  // ---------- Panel open/close ----------
-  function openPanel(panel, activator) {
-    try {
-      panel.style.display = 'block';
-      // Position near activator, clamped to viewport
-      const r = activator.getBoundingClientRect();
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const panelW = Math.min(360, vw - 28);
-      const leftRaw = r.left;
-      const topRaw  = r.bottom + 8;
-      const left = Math.max(14, Math.min(leftRaw, vw - panelW - 14));
-      const top  = Math.max(14, Math.min(topRaw,  vh - panel.offsetHeight - 14));
-      panel.style.left = left + 'px';
-      panel.style.top  = top  + 'px';
-    } catch (e) {
-      // Fallback: bottom-right
-      panel.style.left = 'auto';
-      panel.style.right = '14px';
-      panel.style.top = 'auto';
-      panel.style.bottom = '62px';
-      panel.style.display = 'block';
-    }
-  }
-  function onExit(panel) {
-    panel.style.display = 'none';
-  }
-
-  // ---------- Apply (save → dispatch → iframe → close) ----------
-  function onApply(panel, next) {
-    saveSettings(next);
-
-    // Update shared state for environment.js
-    window.__WINDS_SONG__.wind   = Number(next.wind);
-    window.__WINDS_SONG__.breath = Number(next.breath);
-    window.__WINDS_SONG__.elegra = Number(next.elegra);
-    window.__WINDS_SONG__.rez    = Number(next.rez);
-
-    // Broadcast to environment.js
-    window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-
-    // Inform the background iframe (environment.html) about wind
-    postWindToEnvironment(next.wind);
-
-    // Close panel (reliably)
-    onExit(panel);
-    // Hard fallback
-    panel.style.display = 'none';
-    try { document.activeElement && document.activeElement.blur(); } catch {}
-  }
-
-  // ---------- DOM builders ----------
+  // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
+
     el.innerHTML = `
       <div class="ws-head">
         <div class="ws-title">
@@ -187,7 +114,7 @@
         <div class="ws-icon">${svgBreath()}</div>
         <div class="ws-label">Breath</div>
         <div class="ws-slider">
-          <input id="ws-breath" type="range" min="6" max="30" step="1" />
+          <input id="ws-breath" type="range" min="0" max="100" step="1" />
           <div class="ws-val" id="ws-breath-val"></div>
         </div>
       </div>
@@ -211,11 +138,11 @@
       </div>
 
       <div class="ws-help">
-        Breath = butterfly arc. Elegra kept for state. Rez = times/hour (1 = once per refresh).
+        Breath = butterfly oscillation. Elegra = reveal pacing (s). Rez = times/hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
-        <div class="ws-btn" id="ws-apply">Apply</div>
+        <div class="ws-btn primary" id="ws-apply">Apply</div>
       </div>
     `;
 
@@ -243,84 +170,112 @@
     };
     syncVals();
 
-    wind.addEventListener('input',   syncVals);
+    wind.addEventListener('input', syncVals);
     breath.addEventListener('input', syncVals);
     elegra.addEventListener('input', syncVals);
-    rez.addEventListener('input',    syncVals);
+    rez.addEventListener('input', syncVals);
 
-    // Close button (X)
-    el.querySelector('.ws-close').addEventListener('click', () => onExitCb(el));
+    // Close button
+    el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply
-    el.querySelector('#ws-apply').addEventListener('click', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
+    // Apply closes the panel
+    el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
-        breath: clampN(breath.value, 6, 30, 16),
+        breath: clampN(breath.value, 0, 100, 20),
         elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
       };
-      onApplyCb(el, next);
+      onApplyCb(next);
     });
 
     return el;
   }
 
-  function buildActivator(onClick) {
+  function openPanel() {
+    const p = document.querySelector('.ws-panel');
+    // Position the panel anchored to the activator
+    const a = document.querySelector('.ws-activator');
+    if (a) {
+      const r = a.getBoundingClientRect();
+      p.style.top = `${Math.max(8, r.bottom + 8)}px`;
+      p.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    } else {
+      p.style.top = '60px';
+      p.style.right = '14px';
+    }
+    p.style.display = 'block';
+  }
+  function onExit() {
+    document.querySelector('.ws-panel').style.display = 'none';
+  }
+
+  function onApply(next) {
+    saveSettings(next);
+
+    // Update shared state (environment.js listens to this)
+    window.__WINDS_SONG__.wind   = Number(next.wind);
+    window.__WINDS_SONG__.breath = Number(next.breath);  // butterfly oscillation only
+    window.__WINDS_SONG__.elegra = Number(next.elegra);
+    window.__WINDS_SONG__.rez    = Number(next.rez);
+
+    window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
+    postWindToEnvironment(next.wind);
+
+    onExit(); // close on apply
+  }
+
+  function buildActivator(openFn) {
     const b = document.createElement('div');
     b.className = 'ws-activator';
     b.innerHTML = svgWind();
     b.title = 'Wind Song';
-    b.addEventListener('click', onClick);
+    b.addEventListener('click', openFn);
     return b;
   }
 
-  function positionActivatorUnderThreeDots(btn) {
-    // Find a visible “three-dots/About” trigger near top-right
-    const cand = document.querySelector(
-      '.menu-toggle, .more, .kebab, [aria-label="Menu"], [aria-label="More"], .about-toggle, .menu button, .menu .trigger, nav .more'
+  // Position under the three-dot menu (top-right). We don’t modify index.html;
+  // we just try to find the menu button. Fallback to fixed near top-right.
+  function positionActivatorNearThreeDots(node) {
+    // Try likely selectors for the three-dot menu
+    const candidates = document.querySelectorAll(
+      '.three-dots, .menu-toggle, .menu button, nav .menu button, .about-menu, [data-role="menu"]'
     );
-    let placed = false;
-    if (cand) {
-      const r = cand.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
-        btn.style.top  = Math.round(r.bottom + 8) + 'px';
-        btn.style.left = Math.round(r.left) + 'px';
-        btn.style.right = 'auto';
-        btn.style.bottom = 'auto';
-        placed = true;
-      }
+    let anchor = null;
+    for (const el of candidates) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width && rect.height) { anchor = el; break; }
     }
-    if (!placed) {
-      // fallback: bottom-right
-      btn.style.right = '14px';
-      btn.style.bottom = '14px';
-      btn.style.top = 'auto';
-      btn.style.left = 'auto';
+
+    if (anchor) {
+      const r = anchor.getBoundingClientRect();
+      node.style.top = `${Math.max(8, r.bottom + 8)}px`;
+      node.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+      node.style.left = 'auto';
+      node.style.bottom = 'auto';
+    } else {
+      // Fallback near top-right if we can’t detect the menu
+      node.style.top = '56px';
+      node.style.right = '14px';
+      node.style.left = 'auto';
+      node.style.bottom = 'auto';
     }
   }
 
-  // ---------- Post wind multiplier to environment.html (iframe) ----------
   function postWindToEnvironment(windVal) {
-    try {
-      const iframe = document.getElementById('environment-iframe');
-      if (!iframe || !iframe.contentWindow) return;
-      const wind = Number(windVal) || 5;
-      iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
-    } catch (e) {
-      console.warn('[windsong-controller] WIND_UPDATE postMessage failed:', e);
-    }
+    const iframe = document.getElementById('environment-iframe');
+    if (!iframe || !iframe.contentWindow) return;
+    const wind = Number(windVal) || 5;
+    iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
-  // ---------- CSS injector ----------
   function injectCSS(text) {
     const tag = document.createElement('style');
     tag.textContent = text;
     document.head.appendChild(tag);
   }
 
-  // ---------- SVG icons (unchanged visuals) ----------
+  // ---------- SVG icons ----------
   function svgWind() {
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
