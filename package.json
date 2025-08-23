@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "lint": "eslint . --ext .js",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm run test"
+  }
+}
