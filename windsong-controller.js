@@ -1,26 +1,25 @@
+<script>
 // windsong-controller.js
 (function () {
   // ---------- Storage helpers ----------
-  const STORE_KEY = 'windsong.settings.v2';
-  function clampN(v, min, max, def) {
-    v = Number(v);
-    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
-  }
+  const STORE_KEY = 'windsong.settings.v1';
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
         wind:   clampN(s.wind,   1, 10, 5),
-        breath: clampN(s.breath, 1, 10, 5),
-        elegra: clampN(s.elegra, 8, 30, 15), // kept visually; no effect in env.js
-        rez:    clampN(s.rez,    1,  6,  1),
+        breath: clampN(s.breath, 6,  30, 16), // now: butterfly oscillation
+        elegra: clampN(s.elegra, 8,  30, 15), // UI kept; reveal speed fixed in env.js
+        rez:    clampN(s.rez,    1,   6,  1),
       };
-    } catch {
-      return { wind:5, breath:5, elegra:15, rez:1 };
-    }
+    } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
   function saveSettings(s) {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  }
+  function clampN(v, min, max, def) {
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
   }
 
   // ---------- Shared state bootstrap ----------
@@ -28,16 +27,17 @@
   window.__WINDS_SONG__ = window.__WINDS_SONG__ || {};
   if (window.__WINDS_SONG__.wind   == null) window.__WINDS_SONG__.wind   = settings.wind;
   if (window.__WINDS_SONG__.breath == null) window.__WINDS_SONG__.breath = settings.breath;
-  if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra; // harmless
+  if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
   // Inform environment.html about current wind multiplier (so leaves speed match)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (same visual language) ----------
+  // ---------- Minimal styles ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; z-index:9998; width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
+      position:fixed; z-index:9998;
+      width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
       box-shadow:0 6px 18px rgba(0,0,0,.25);
@@ -45,59 +45,91 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; right:14px; bottom:62px; z-index:9999;
+      position:fixed; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
       padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
+      right:14px; /* below About area; top set dynamically */
+      display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
     .ws-close{ cursor:pointer; opacity:.8; }
     .ws-close:hover{ opacity:1; }
-
     .ws-row{ display:flex; align-items:center; gap:10px; margin:10px 2px; }
     .ws-icon{ width:22px; height:22px; opacity:.9; flex:0 0 auto; }
     .ws-label{ color:#cfe7ff; min-width:72px; }
-
     .ws-slider{ flex:1; display:flex; align-items:center; gap:8px; }
-    .ws-slider input[type="range"]{
-      width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none;
-    }
+    .ws-slider input[type="range"]{ width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none; }
     .ws-slider input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
       background:#8dc6ff; border:1px solid rgba(255,255,255,.6);
       box-shadow:0 0 0 3px rgba(141,198,255,.15);
     }
     .ws-val{ width:36px; text-align:right; color:#a9c6ff; opacity:.95; font-variant-numeric:tabular-nums; }
-
     .ws-help{ color:#9fb4d8; opacity:.85; font-size:12px; margin:6px 4px 2px; }
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
       flex:1; text-align:center; padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none;
-      background:rgba(141,198,255,.22); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
+      background:rgba(141,198,255,.12); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
     }
+    .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
+    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // Try to place an activator just *below* the 3-dot/about button.
+  // Try to place activator a few px below the "About" three-dot button; fallback to bottom-right
   const activator = buildActivator(openPanel);
+  positionActivatorNearAbout(activator);
   document.body.appendChild(activator);
-  positionActivatorNearMenu(activator);
-  window.addEventListener('resize', () => positionActivatorNearMenu(activator));
-  window.addEventListener('scroll', () => positionActivatorNearMenu(activator), { passive:true });
+
+  // ---------- Rez scheduler (top-of-hour aligned) ----------
+  let rezTimerInitial = null;
+  let rezInterval = null;
+  let suspendedBySpecialPoem = false;
+
+  function clearRezSchedule(){
+    if (rezTimerInitial) { clearTimeout(rezTimerInitial); rezTimerInitial = null; }
+    if (rezInterval) { clearInterval(rezInterval); rezInterval = null; }
+  }
+  function scheduleRez(rez){
+    clearRezSchedule();
+    if (rez <= 1) return; // repeats disabled; environment does the once-per-refresh
+    // wait until top of next hour, then fire rez times/hour evenly
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setMinutes(0,0,0);
+    if (now >= nextHour) nextHour.setHours(nextHour.getHours()+1);
+
+    rezTimerInitial = setTimeout(()=>{
+      if (!suspendedBySpecialPoem) dispatchTrigger();
+      const periodMs = Math.floor(60*60*1000 / rez);
+      rezInterval = setInterval(()=>{
+        if (!suspendedBySpecialPoem) dispatchTrigger();
+      }, periodMs);
+    }, nextHour.getTime() - now.getTime());
+  }
+  function dispatchTrigger(){
+    window.dispatchEvent(new Event('windsong:trigger'));
+  }
+
+  // suspend/resume for special poem
+  window.addEventListener('special-poem:begin', ()=>{ suspendedBySpecialPoem = true; });
+  window.addEventListener('special-poem:end', ()=>{ suspendedBySpecialPoem = false; });
+
+  // kick scheduler with current rez
+  scheduleRez(settings.rez);
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
-    el.style.display = 'none';
-
     el.innerHTML = `
       <div class="ws-head">
         <div class="ws-title">
@@ -120,7 +152,7 @@
         <div class="ws-icon">${svgBreath()}</div>
         <div class="ws-label">Breath</div>
         <div class="ws-slider">
-          <input id="ws-breath" type="range" min="1" max="10" step="1" />
+          <input id="ws-breath" type="range" min="6" max="30" step="1" />
           <div class="ws-val" id="ws-breath-val"></div>
         </div>
       </div>
@@ -144,11 +176,12 @@
       </div>
 
       <div class="ws-help">
-        Wind = global speed. Breath = butterfly oscillation. Elegra kept for look (reveal speed is fixed). Rez = times per hour (1 = once per refresh).
+        Wind = speed of all motion. Breath = butterfly oscillation. Elegra kept (reveal is fixed slow).
+        Rez = repeats per hour (1 = once per refresh only).
       </div>
 
       <div class="ws-actions">
-        <div class="ws-btn" id="ws-apply">Apply</div>
+        <div class="ws-btn primary" id="ws-apply">Apply</div>
       </div>
     `;
 
@@ -184,12 +217,12 @@
     // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply button (apply + close)
+    // Apply button (saves, dispatches, posts wind to iframe, closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
-        breath: clampN(breath.value, 1, 10, 5),
-        elegra: clampN(elegra.value, 8, 30, 15), // saved, not used in env.js
+        breath: clampN(breath.value, 6, 30, 16),
+        elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
@@ -199,27 +232,38 @@
   }
 
   function openPanel() {
-    document.querySelector('.ws-panel').style.display = 'block';
+    const pnl = document.querySelector('.ws-panel');
+    pnl.style.display = 'block';
+    // place panel a little below the activator
+    const activ = document.querySelector('.ws-activator');
+    if (activ) {
+      pnl.style.top = (activ.getBoundingClientRect().bottom + 10) + 'px';
+    } else {
+      pnl.style.bottom = '62px';
+    }
   }
   function onExit() {
     document.querySelector('.ws-panel').style.display = 'none';
   }
 
   function onApply(next) {
-    // Save for this session + future
+    // Save
     saveSettings(next);
 
-    // Update shared state for environment.js (drift, reveal, butterflies)
+    // Update shared state
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
-    window.__WINDS_SONG__.elegra = Number(next.elegra); // harmless
+    window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Dispatch app-wide event (environment.js listens for this)
+    // Dispatch app-wide event (environment.js listens)
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
 
     // Inform the background iframe (environment.html) about wind speed as well
     postWindToEnvironment(next.wind);
+
+    // Re-schedule Rez
+    scheduleRez(next.rez);
 
     // Close panel
     onExit();
@@ -230,36 +274,34 @@
     b.className = 'ws-activator';
     b.innerHTML = svgWind();
     b.title = 'Wind Song';
-    b.style.right = '14px';
-    b.style.bottom = '14px'; // fallback position
     b.addEventListener('click', openFn);
     return b;
   }
 
-  // Place the activator a bit *below* the kebab/about button if we can find one
-  function positionActivatorNearMenu(node) {
-    try {
-      const anchor =
-        document.querySelector('.kebab') ||
-        document.querySelector('[data-menu="kebab"]') ||
-        document.querySelector('.about, [data-action="about"]');
+  function positionActivatorNearAbout(el){
+    // try to find an About button (heuristics)
+    const candidates = Array.from(document.querySelectorAll('*'))
+      .filter(n=>{
+        const txt = (n.textContent || '').trim().toLowerCase();
+        const aria = (n.getAttribute && (n.getAttribute('aria-label')||'')).toLowerCase();
+        return txt === 'about' || aria === 'about' || n.id === 'about' || n.className.toLowerCase().includes('about');
+      });
 
-      if (!anchor) return; // keep fallback bottom-right
-
-      const r = anchor.getBoundingClientRect();
-      // Place ~12px below the anchor, right-aligned with it
-      node.style.top = `${r.bottom + 12 + window.scrollY}px`;
-      node.style.left = `${Math.max(8, r.right - 38) + window.scrollX}px`;
-      node.style.right = 'auto';
-      node.style.bottom = 'auto';
-    } catch {}
+    if (candidates.length){
+      const a = candidates[0].getBoundingClientRect();
+      el.style.left = (a.left) + 'px';
+      el.style.top  = (a.bottom + 12) + 'px'; // a few spaces below
+    } else {
+      // fallback bottom-right
+      el.style.right = '14px';
+      el.style.bottom = '14px';
+    }
   }
 
   function postWindToEnvironment(windVal) {
-    // environment.html iframe id is set by environment-loader.js
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
-    const wind = Number(windVal) || 5; // 1..10; 5 = baseline
+    const wind = Number(windVal) || 5;
     iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
@@ -280,7 +322,6 @@
       </svg>`;
   }
   function svgBreath() {
-    // "poem ↔ poem" glyph: two blocks with a bidirectional arrow
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="4" width="18" height="16" rx="2" />
@@ -291,7 +332,6 @@
       </svg>`;
   }
   function svgElegra() {
-    // rhythm line (kept for look)
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
@@ -311,3 +351,4 @@
       </svg>`;
   }
 })();
+</script>
