@@ -1,27 +1,25 @@
-// windsong-controller.js (final)
-// - Keeps UI visuals/placement; “Wind Song” title with a space.
-// - Apply closes the panel. No “Trigger now” button.
-// - Wind posts factor to environment.html (leaves speed).
-// - Breath now controls butterfly oscillation only (help text updated).
-// - Elegra slider kept visually but no longer changes reveal pacing.
-// - Rez scheduler (x>1) aligned to top-of-hour grid; deferred during special poem.
-
+// windsong-controller.js
 (function () {
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
-  function clampN(v, min, max, def){ v=Number(v); return Number.isFinite(v)?Math.max(min,Math.min(max,v)):def; }
+  function clampN(v, min, max, def) {
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
+  }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
         wind:   clampN(s.wind,   1, 10, 5),
         breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI; ignored by reveal
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI consistency (not used for reveal)
         rez:    clampN(s.rez,    1,   6,  1),
       };
     } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
-  function saveSettings(s){ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+  function saveSettings(s) {
+    localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
@@ -31,13 +29,13 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Inform environment.html (leaves) about current wind multiplier
+  // Inform environment.html about current wind multiplier (so leaves speed match)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (unchanged visuals; reposition under About) ----------
+  // ---------- Minimal styles (kept aesthetic) ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; right:14px; top:64px; z-index:9998; /* under the 3-dot area */
+      position:fixed; z-index:9998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
@@ -46,7 +44,7 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; right:14px; top:112px; z-index:9999;
+      position:fixed; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -72,63 +70,30 @@
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
       flex:1; text-align:center; padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none;
-      background:rgba(141,198,255,.12); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
+      background:rgba(141,198,255,.22); color:#e6f3ff; border:1px solid rgba(141,198,255,.35);
     }
-    .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
-    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
+  panel.style.display = 'none';
   document.body.appendChild(panel);
 
-  // Try attaching an item in an existing nav (kept, but we rely on activator button)
-  const menuInserted = tryAttachMenuItem(openPanel);
-  if (!menuInserted) {
-    const activator = buildActivator(openPanel);
-    document.body.appendChild(activator);
-  }
+  // Always use activator, placed a few pixels below the "About" trigger if found
+  const activator = buildActivator(openPanel);
+  document.body.appendChild(activator);
+  placeActivatorNearAbout(activator); // will fallback to bottom-right if "About" not found
+  window.addEventListener('resize', () => placeActivatorNearAbout(activator));
+  window.addEventListener('scroll', () => placeActivatorNearAbout(activator), { passive:true });
 
-  // ---------- Rez scheduler (x>1) aligned to hour grid ----------
-  let SCHED = null;
-  setupRezScheduler(settings.rez);
-
-  function setupRezScheduler(rez){
-    if (SCHED) { clearInterval(SCHED); SCHED = null; }
-    if (rez <= 1) return; // once per refresh only
-    const intervalMin = 60 / rez; // e.g., 30m, 20m, 15m, 12m, 10m
-    SCHED = setInterval(() => {
-      if (document.hidden) return;          // don't spam if backgrounded
-      if (window.__SPECIAL_ACTIVE__) return; // controller-side hint (optional)
-      // Align to minute grid: trigger when minute % interval == 0 and seconds near 0..5
-      const now = new Date();
-      const min = now.getMinutes();
-      const sec = now.getSeconds();
-      if (min % intervalMin === 0 && sec < 6) {
-        // Defer if special poem is active (environment also suppresses)
-        if (!window.__SPECIAL_ACTIVE__) {
-          window.dispatchEvent(new Event('windsong:trigger'));
-        }
-      }
-    }, 1000);
-  }
-
-  // Update scheduler when Rez changes
-  window.addEventListener('windsong:update', (e)=>{
-    const { rez } = e.detail || {};
-    if (rez != null) setupRezScheduler(Number(rez));
-  });
-
-  // Allow index.js to signal special poem status (optional helper)
-  window.addEventListener('special-poem:begin', ()=>{ window.__SPECIAL_ACTIVE__ = true; });
-  window.addEventListener('special-poem:end',   ()=>{ window.__SPECIAL_ACTIVE__ = false; });
+  // Initialize Rez scheduler based on current settings
+  scheduleRez(settings.rez);
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
-    el.style.display = 'none';
 
     el.innerHTML = `
       <div class="ws-head">
@@ -176,11 +141,12 @@
       </div>
 
       <div class="ws-help">
-        Wind = global motion speed. Breath = butterfly flight oscillation. Elegra = (visual only; reveal speed fixed). Rez = times per hour (1 = once per refresh).
+        Wind = global speed. Breath = butterfly oscillation. Elegra (shown for UI consistency; reveal speed is fixed by ruleset).
+        Rez = times per hour (1 = once per refresh only).
       </div>
 
       <div class="ws-actions">
-        <div class="ws-btn primary" id="ws-apply">Apply</div>
+        <div class="ws-btn" id="ws-apply">Apply</div>
       </div>
     `;
 
@@ -216,12 +182,12 @@
     // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply button: save, broadcast, post wind to iframe, close
+    // Apply button (saves, dispatches, closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
         breath: clampN(breath.value, 6, 30, 16),
-        elegra: clampN(elegra.value, 8, 30, 15), // stored but not used by reveal
+        elegra: clampN(elegra.value, 8, 30, 15), // kept
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
@@ -230,22 +196,27 @@
     return el;
   }
 
-  function openPanel() { document.querySelector('.ws-panel').style.display = 'block'; }
-  function onExit()    { document.querySelector('.ws-panel').style.display = 'none'; }
+  function openPanel() { panel.style.display = 'block'; }
+  function onExit()    { panel.style.display = 'none'; }
 
   function onApply(next) {
+    // Persist
     saveSettings(next);
-    // Update shared state for environment.js (drift, butterflies, reveal suppression honored there)
+
+    // Update shared state for environment.js
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Dispatch app-wide event (environment.js listens)
+    // Dispatch app-wide update
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
 
-    // Inform background iframe (environment.html) about wind speed for leaves
+    // Notify background iframe (environment.html) about Wind
     postWindToEnvironment(next.wind);
+
+    // Rebuild Rez schedule
+    scheduleRez(next.rez);
 
     // Close panel
     onExit();
@@ -260,12 +231,88 @@
     return b;
   }
 
-  function tryAttachMenuItem(openFn) {
-    // Leave About menu alone; we still try common navs in case you want it there in future
-    const menu = document.querySelector('.menu, nav, .nav, #menu, .site-menu, .wrap .menu');
-    if (!menu) return false;
-    // We’re NOT inserting inside the dots menu per ruleset preference.
-    return false;
+  function findAboutTrigger() {
+    // Try likely candidates: text "About" or IDs
+    const candidates = Array.from(document.querySelectorAll('a,button,[role="button"], #about, #menu-about, [data-menu="about"]'));
+    for (const el of candidates) {
+      const txt = (el.textContent || '').trim().toLowerCase();
+      if (txt === 'about' || el.id === 'about' || el.id === 'menu-about' || el.getAttribute('data-menu') === 'about') {
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function placeActivatorNearAbout(activator) {
+    const about = findAboutTrigger();
+    if (!about) {
+      // fallback bottom-right, a few px above bottom to avoid any gray gutter
+      Object.assign(activator.style, { right:'14px', bottom:'14px', left:'',
+        top:'' });
+      return;
+    }
+    const r = about.getBoundingClientRect();
+    // Place a few pixels under the About trigger, left-aligned
+    const top = Math.round(r.bottom + 8 + window.scrollY);
+    const left = Math.round(r.left + window.scrollX);
+    Object.assign(activator.style, { left: left+'px', top: top+'px', right:'', bottom:'' });
+  }
+
+  // ---------- Rez scheduler (aligned to top-of-hour) ----------
+  let rezTimers = [];
+  let rezHourlyInterval = null;
+
+  function clearRezTimers() {
+    rezTimers.forEach(t => clearTimeout(t));
+    rezTimers = [];
+    if (rezHourlyInterval) { clearInterval(rezHourlyInterval); rezHourlyInterval = null; }
+  }
+
+  function scheduleRez(rezVal) {
+    clearRezTimers();
+
+    const rez = Number(rezVal) || 1;
+    if (rez <= 1) {
+      // No recurring triggers; one Wind’s Song run happens on page load only
+      return;
+    }
+
+    // helper to schedule one hour’s worth starting at a Date "hourStart"
+    function scheduleHour(hourStart) {
+      // fire rez times evenly spaced across the hour
+      for (let k=0; k<rez; k++) {
+        const minute = Math.floor(k * 60 / rez);
+        const fireAt = new Date(hourStart.getTime());
+        fireAt.setMinutes(minute, 0, 0);
+        const delay = Math.max(0, fireAt.getTime() - Date.now());
+        rezTimers.push(setTimeout(() => {
+          window.dispatchEvent(new Event('windsong:trigger'));
+        }, delay));
+      }
+    }
+
+    // align to next top-of-hour
+    const now = new Date();
+    const nextHour = new Date(now.getTime());
+    nextHour.setMinutes(0,0,0);
+    if (now.getMinutes() !== 0 || now.getSeconds() !== 0 || now.getMilliseconds() !== 0) {
+      nextHour.setHours(nextHour.getHours() + 1);
+    }
+
+    // Schedule first hour block
+    const initialDelay = Math.max(0, nextHour.getTime() - Date.now());
+    rezTimers.push(setTimeout(() => {
+      const start = new Date();
+      start.setMinutes(0,0,0);
+      scheduleHour(start);
+
+      // Repeat every hour on the hour
+      rezHourlyInterval = setInterval(() => {
+        const h = new Date();
+        h.setMinutes(0,0,0);
+        scheduleHour(h);
+      }, 60 * 60 * 1000);
+    }, initialDelay));
   }
 
   function postWindToEnvironment(windVal) {
@@ -275,35 +322,50 @@
     iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
-  function injectCSS(text) { const tag = document.createElement('style'); tag.textContent = text; document.head.appendChild(tag); }
+  function injectCSS(text) {
+    const tag = document.createElement('style');
+    tag.textContent = text;
+    document.head.appendChild(tag);
+  }
 
   // ---------- SVG icons ----------
-  function svgWind(){return `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M3 8c4 0 6-2 9-2 2.5 0 3.5 1.5 3.5 2.8 0 1.2-1 2.2-2.3 2.2" />
-      <path d="M3 12h10c2 0 3-1 3-2.2C16 8.5 15 7 12.5 7" />
-      <path d="M3 16c5 0 8-2 12-2 2 0 3 1.2 3 2.2 0 1.2-1 2.8-3.2 2.8" />
-      <path d="M6 9c.8-.6 1.5-1.2 2.2-1.8" />
-    </svg>`;}
-  function svgBreath(){return `
-    <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="2" y="4" width="18" height="16" rx="2" />
-      <rect x="44" y="4" width="18" height="16" rx="2" />
-      <path d="M22 12h20" />
-      <path d="M28 8l-6 4 6 4" />
-      <path d="M36 8l6 4-6 4" />
-    </svg>`;}
-  function svgElegra(){return `
-    <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-      <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
-    </svg>`;}
-  function svgClock(){return `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"></circle>
-      <path d="M12 7v5l3 2"></path>
-    </svg>`;}
-  function svgClose(){return `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M18 6L6 18M6 6l12 12"></path>
-    </svg>`;}
+  function svgWind() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 8c4 0 6-2 9-2 2.5 0 3.5 1.5 3.5 2.8 0 1.2-1 2.2-2.3 2.2" />
+        <path d="M3 12h10c2 0 3-1 3-2.2C16 8.5 15 7 12.5 7" />
+        <path d="M3 16c5 0 8-2 12-2 2 0 3 1.2 3 2.2 0 1.2-1 2.8-3.2 2.8" />
+        <path d="M6 9c.8-.6 1.5-1.2 2.2-1.8" />
+      </svg>`;
+  }
+  function svgBreath() {
+    // "poem ↔ poem" glyph
+    return `
+      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="4" width="18" height="16" rx="2" />
+        <rect x="44" y="4" width="18" height="16" rx="2" />
+        <path d="M22 12h20" />
+        <path d="M28 8l-6 4 6 4" />
+        <path d="M36 8l6 4-6 4" />
+      </svg>`;
+  }
+  function svgElegra() {
+    return `
+      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
+      </svg>`;
+  }
+  function svgClock() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 7v5l3 2"></path>
+      </svg>`;
+  }
+  function svgClose() {
+    return `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 6L6 18M6 6l12 12"></path>
+      </svg>`;
+  }
 })();
