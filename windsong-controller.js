@@ -1,5 +1,9 @@
 // windsong-controller.js
 (function () {
+  // ---------- Guard: run once ----------
+  if (window.__WINDS_SONG_CTL__) return;
+  window.__WINDS_SONG_CTL__ = true;
+
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
   function clampN(v, min, max, def) {
@@ -12,7 +16,7 @@
       return {
         wind:   clampN(s.wind,   1, 10, 5),
         breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15), // kept for state, reveal uses fixed pacing
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for state (reveal uses fixed pacing)
         rez:    clampN(s.rez,    1,   6,  1),
       };
     } catch {
@@ -31,10 +35,10 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Tell the background iframe about current wind on load (leaves/wind speed)
+  // Tell the background iframe (environment.html) about current wind on load
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (visuals unchanged) ----------
+  // ---------- Styles (unchanged look) ----------
   injectCSS(`
     .ws-activator{
       position:fixed; z-index:9998;
@@ -46,7 +50,7 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; z-index:9999;
+      position:fixed; z-index:9999; display:none;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -77,32 +81,65 @@
     .ws-btn:hover{ filter:brightness(1.05); }
   `);
 
-  // ---------- Build UI ----------
-  const panel = buildPanel(settings, onApply, onExit);
-  document.body.appendChild(panel);
-
-  // Floating activator: position a few px UNDER the three-dot menu (if we can find it)
-  const activator = buildActivator(openPanel);
-  document.body.appendChild(activator);
-  positionActivatorUnderThreeDots(activator);
-
-  // Reposition on resize (in case the three-dot moves)
-  window.addEventListener('resize', () => positionActivatorUnderThreeDots(activator));
-
-  // Keep a direct ref for reliable close
-  function openPanel() {
-    panel.style.display = 'block';
-    // Place panel near activator by default
-    const r = activator.getBoundingClientRect();
-    panel.style.top  = Math.round(r.bottom + 8) + 'px';
-    panel.style.left = Math.round(r.left) + 'px';
+  // ---------- Init on DOM ready (robust) ----------
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
   }
-  function onExit() {
+
+  function init() {
+    try {
+      const panel = buildPanel(settings, onApply, onExit);
+      document.body.appendChild(panel);
+
+      const activator = buildActivator(() => openPanel(panel, activator));
+      document.body.appendChild(activator);
+
+      // Place activator a few px under the three‑dot menu (if visible), else bottom-right
+      positionActivatorUnderThreeDots(activator);
+
+      // Reposition on resize (menu can move)
+      window.addEventListener('resize', () => positionActivatorUnderThreeDots(activator));
+
+      // Close on ESC
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') onExit(panel);
+      });
+    } catch (err) {
+      console.error('[windsong-controller] init error:', err);
+    }
+  }
+
+  // ---------- Panel open/close ----------
+  function openPanel(panel, activator) {
+    try {
+      panel.style.display = 'block';
+      // Position near activator, clamped to viewport
+      const r = activator.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const panelW = Math.min(360, vw - 28);
+      const leftRaw = r.left;
+      const topRaw  = r.bottom + 8;
+      const left = Math.max(14, Math.min(leftRaw, vw - panelW - 14));
+      const top  = Math.max(14, Math.min(topRaw,  vh - panel.offsetHeight - 14));
+      panel.style.left = left + 'px';
+      panel.style.top  = top  + 'px';
+    } catch (e) {
+      // Fallback: bottom-right
+      panel.style.left = 'auto';
+      panel.style.right = '14px';
+      panel.style.top = 'auto';
+      panel.style.bottom = '62px';
+      panel.style.display = 'block';
+    }
+  }
+  function onExit(panel) {
     panel.style.display = 'none';
   }
 
-  // ---------- Apply handler (save → dispatch → iframe → close) ----------
-  function onApply(next) {
+  // ---------- Apply (save → dispatch → iframe → close) ----------
+  function onApply(panel, next) {
     saveSettings(next);
 
     // Update shared state for environment.js
@@ -117,16 +154,17 @@
     // Inform the background iframe (environment.html) about wind
     postWindToEnvironment(next.wind);
 
-    // Close panel (make absolutely sure)
-    onExit();
+    // Close panel (reliably)
+    onExit(panel);
+    // Hard fallback
+    panel.style.display = 'none';
+    try { document.activeElement && document.activeElement.blur(); } catch {}
   }
 
   // ---------- DOM builders ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
-    el.style.display = 'none';
-
     el.innerHTML = `
       <div class="ws-head">
         <div class="ws-title">
@@ -211,7 +249,7 @@
     rez.addEventListener('input',    syncVals);
 
     // Close button (X)
-    el.querySelector('.ws-close').addEventListener('click', onExitCb);
+    el.querySelector('.ws-close').addEventListener('click', () => onExitCb(el));
 
     // Apply
     el.querySelector('#ws-apply').addEventListener('click', (ev) => {
@@ -223,37 +261,38 @@
         elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
       };
-      onApplyCb(next);
-      // explicit hide fallback (in case onExit was blocked)
-      el.style.display = 'none';
-      // blur any active element to avoid stray focus outlines
-      try { document.activeElement && document.activeElement.blur(); } catch {}
+      onApplyCb(el, next);
     });
 
     return el;
   }
 
-  function buildActivator(openFn) {
+  function buildActivator(onClick) {
     const b = document.createElement('div');
     b.className = 'ws-activator';
     b.innerHTML = svgWind();
     b.title = 'Wind Song';
-    b.addEventListener('click', openFn);
+    b.addEventListener('click', onClick);
     return b;
   }
 
   function positionActivatorUnderThreeDots(btn) {
-    // Common “three dots” / menu toggles
+    // Find a visible “three-dots/About” trigger near top-right
     const cand = document.querySelector(
       '.menu-toggle, .more, .kebab, [aria-label="Menu"], [aria-label="More"], .about-toggle, .menu button, .menu .trigger, nav .more'
     );
+    let placed = false;
     if (cand) {
       const r = cand.getBoundingClientRect();
-      btn.style.top  = Math.round(r.bottom + 8) + 'px';
-      btn.style.left = Math.round(r.left) + 'px';
-      btn.style.right = 'auto';
-      btn.style.bottom = 'auto';
-    } else {
+      if (r.width > 0 && r.height > 0) {
+        btn.style.top  = Math.round(r.bottom + 8) + 'px';
+        btn.style.left = Math.round(r.left) + 'px';
+        btn.style.right = 'auto';
+        btn.style.bottom = 'auto';
+        placed = true;
+      }
+    }
+    if (!placed) {
       // fallback: bottom-right
       btn.style.right = '14px';
       btn.style.bottom = '14px';
@@ -264,10 +303,14 @@
 
   // ---------- Post wind multiplier to environment.html (iframe) ----------
   function postWindToEnvironment(windVal) {
-    const iframe = document.getElementById('environment-iframe');
-    if (!iframe || !iframe.contentWindow) return;
-    const wind = Number(windVal) || 5;
-    iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
+    try {
+      const iframe = document.getElementById('environment-iframe');
+      if (!iframe || !iframe.contentWindow) return;
+      const wind = Number(windVal) || 5;
+      iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
+    } catch (e) {
+      console.warn('[windsong-controller] WIND_UPDATE postMessage failed:', e);
+    }
   }
 
   // ---------- CSS injector ----------
