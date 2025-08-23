@@ -2,25 +2,23 @@
 (function () {
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
-  function clampN(v, min, max, def) {
-    v = Number(v);
-    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
-  }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
-        wind:   clampN(s.wind,   1, 10, 5),  // 5 = baseline
-        breath: clampN(s.breath, 6,  30, 16),// now: butterfly feel only
-        elegra: clampN(s.elegra, 8,  30, 15),
+        wind:   clampN(s.wind,   1, 10, 5),
+        breath: clampN(s.breath, 6,  30, 16),
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI consistency; not used for reveal timing anymore
         rez:    clampN(s.rez,    1,   6,  1),
       };
-    } catch {
-      return { wind:5, breath:16, elegra:15, rez:1 };
-    }
+    } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
   }
   function saveSettings(s) {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
+  }
+  function clampN(v, min, max, def) {
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
   }
 
   // ---------- Shared state bootstrap ----------
@@ -34,10 +32,10 @@
   // Inform environment.html about current wind multiplier (so leaves speed match)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (same clean look) ----------
+  // ---------- Minimal styles ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; z-index:9998;
+      position:fixed; right:14px; bottom:14px; z-index:9998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
@@ -46,7 +44,7 @@
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; z-index:9999;
+      position:fixed; right:14px; bottom:62px; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -61,9 +59,7 @@
     .ws-icon{ width:22px; height:22px; opacity:.9; flex:0 0 auto; }
     .ws-label{ color:#cfe7ff; min-width:72px; }
     .ws-slider{ flex:1; display:flex; align-items:center; gap:8px; }
-    .ws-slider input[type="range"]{
-      width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none;
-    }
+    .ws-slider input[type="range"]{ width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none; }
     .ws-slider input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
       background:#8dc6ff; border:1px solid rgba(255,255,255,.6);
@@ -71,7 +67,6 @@
     }
     .ws-val{ width:36px; text-align:right; color:#a9c6ff; opacity:.95; font-variant-numeric:tabular-nums; }
     .ws-help{ color:#9fb4d8; opacity:.85; font-size:12px; margin:6px 4px 2px; }
-
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
       flex:1; text-align:center; padding:8px 10px; border-radius:10px; cursor:pointer; user-select:none;
@@ -79,20 +74,21 @@
     }
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
+
+    /* Optional: small menu item if a site menu exists */
+    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // Place activator a bit below the “three-dot About” menu (if we can find it),
-  // otherwise fall back to bottom-right.
-  const activator = buildActivator(openPanel);
-  document.body.appendChild(activator);
-  positionActivatorNearMoreMenu(activator);
-
-  // Reposition on resize (layout can shift)
-  window.addEventListener('resize', () => positionActivatorNearMoreMenu(activator));
+  // Try to add an item “Wind Song” under an existing nav; fallback to floating activator
+  const menuInserted = tryAttachMenuItem(openPanel);
+  if (!menuInserted) {
+    const activator = buildActivator(openPanel);
+    document.body.appendChild(activator);
+  }
 
   // ---------- Functions ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
@@ -104,7 +100,7 @@
       <div class="ws-head">
         <div class="ws-title">
           ${svgWind()}
-          <span>WindSong</span>
+          <span>Wind Song</span>
         </div>
         <div class="ws-close" title="Close">${svgClose()}</div>
       </div>
@@ -146,7 +142,7 @@
       </div>
 
       <div class="ws-help">
-        Breath = butterfly feel. Elegra = reveal pacing (seconds).
+        Wind = global speed. Breath = butterfly motion. Elegra is kept for now (visual) but final reveal is fixed.
         Rez = times per hour (1 = once per refresh).
       </div>
 
@@ -187,12 +183,12 @@
     // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply (applies + closes)
+    // Apply (also closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
         breath: clampN(breath.value, 6, 30, 16),
-        elegra: clampN(elegra.value, 8, 30, 15),
+        elegra: clampN(elegra.value, 8, 30, 15), // not used by reveal timing anymore
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
@@ -201,43 +197,23 @@
     return el;
   }
 
-  function openPanel() {
-    const p = document.querySelector('.ws-panel');
-    if (p) {
-      // Position the panel near the activator (top-right by default)
-      const a = document.querySelector('.ws-activator');
-      if (a) {
-        const r = a.getBoundingClientRect();
-        p.style.right  = `${Math.max(14, window.innerWidth - r.right)}px`;
-        p.style.bottom = `${Math.max(62, window.innerHeight - r.top + 8)}px`;
-      } else {
-        // default bottom-right
-        p.style.right = '14px';
-        p.style.bottom = '62px';
-      }
-      p.style.display = 'block';
-    }
-  }
-
-  function onExit() {
-    const p = document.querySelector('.ws-panel');
-    if (p) p.style.display = 'none';
-  }
+  function openPanel() { document.querySelector('.ws-panel').style.display = 'block'; }
+  function onExit()    { document.querySelector('.ws-panel').style.display = 'none'; }
 
   function onApply(next) {
-    // Save
+    // Save for this session, restore on reopen
     saveSettings(next);
 
     // Update shared state for environment.js
     window.__WINDS_SONG__.wind   = Number(next.wind);
-    window.__WINDS_SONG__.breath = Number(next.breath); // butterflies only
+    window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    // Broadcast to environment.js
+    // Broadcast change
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
 
-    // Inform background iframe (environment.html) about wind speed (leaves)
+    // Inform the background iframe (environment.html) about wind speed as well
     postWindToEnvironment(next.wind);
 
     // Close panel
@@ -248,48 +224,26 @@
     const b = document.createElement('div');
     b.className = 'ws-activator';
     b.innerHTML = svgWind();
-    b.title = 'WindSong';
+    b.title = 'Wind Song';
     b.addEventListener('click', openFn);
-    // default position (bottom-right); may be repositioned below
-    Object.assign(b.style, { right: '14px', bottom: '14px' });
     return b;
   }
 
-  function positionActivatorNearMoreMenu(buttonEl) {
-    // Try to find the three-dot About menu trigger; common guesses:
-    const candidates = [
-      '.menu [aria-label="More"]',
-      '.menu .more',
-      '.menu button',
-      '.menu',
-      'nav .more',
-      'nav [aria-label="More"]',
-      'nav button.more',
-      'nav',
-      '.wrap .menu'
-    ];
-    let anchor = null;
-    for (const sel of candidates) {
-      const found = document.querySelector(sel);
-      if (found) { anchor = found; break; }
-    }
-    if (!anchor) {
-      // fallback: bottom-right
-      Object.assign(buttonEl.style, { right: '14px', bottom: '14px', left: '', top: '' });
-      return;
-    }
-    const r = anchor.getBoundingClientRect();
-    // Place a few pixels below it, right-aligned to the anchor’s right edge
-    const top  = Math.round(r.bottom + 10);
-    const left = Math.round(r.right - 38); // align right edges (38px wide)
-    Object.assign(buttonEl.style, {
-      top:  `${top}px`,
-      left: `${Math.max(8, left)}px`,
-      right: '', bottom: ''
-    });
+  function tryAttachMenuItem(openFn) {
+    // Try common menu containers; if not found, return false to use floating button
+    const menu = document.querySelector('.menu, nav, .nav, #menu, .site-menu, .wrap .menu');
+    if (!menu) return false;
+    const item = document.createElement('div');
+    item.className = 'ws-menu-item';
+    item.textContent = 'Wind Song';
+    item.style.cssText = 'padding:6px 10px; opacity:.9;';
+    item.addEventListener('click', openFn);
+    menu.appendChild(item);
+    return true;
   }
 
   function postWindToEnvironment(windVal) {
+    // environment.html iframe id is set by environment-loader.js
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
     const wind = Number(windVal) || 5;
@@ -302,7 +256,7 @@
     document.head.appendChild(tag);
   }
 
-  // ---------- SVG icons (unchanged visuals) ----------
+  // ---------- SVG icons ----------
   function svgWind() {
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -324,7 +278,7 @@
       </svg>`;
   }
   function svgElegra() {
-    // rhythm line (fade pattern feel)
+    // rhythm line (kept visually; no longer controls reveal speed)
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
