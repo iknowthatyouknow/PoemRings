@@ -12,10 +12,12 @@
       return {
         wind:   clampN(s.wind,   1, 10, 5),
         breath: clampN(s.breath, 6,  30, 16),
-        elegra: clampN(s.elegra, 8,  30, 15), // kept for UI consistency (not used for reveal)
+        elegra: clampN(s.elegra, 8,  30, 15), // kept for state, reveal uses fixed pacing
         rez:    clampN(s.rez,    1,   6,  1),
       };
-    } catch { return { wind:5, breath:16, elegra:15, rez:1 }; }
+    } catch {
+      return { wind:5, breath:16, elegra:15, rez:1 };
+    }
   }
   function saveSettings(s) {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
@@ -29,10 +31,10 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Inform environment.html about current wind multiplier (so leaves speed match)
+  // Tell the background iframe about current wind on load (leaves/wind speed)
   postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles (kept aesthetic) ----------
+  // ---------- Minimal styles (visuals unchanged) ----------
   injectCSS(`
     .ws-activator{
       position:fixed; z-index:9998;
@@ -77,23 +79,53 @@
 
   // ---------- Build UI ----------
   const panel = buildPanel(settings, onApply, onExit);
-  panel.style.display = 'none';
   document.body.appendChild(panel);
 
-  // Always use activator, placed a few pixels below the "About" trigger if found
+  // Floating activator: position a few px UNDER the three-dot menu (if we can find it)
   const activator = buildActivator(openPanel);
   document.body.appendChild(activator);
-  placeActivatorNearAbout(activator); // will fallback to bottom-right if "About" not found
-  window.addEventListener('resize', () => placeActivatorNearAbout(activator));
-  window.addEventListener('scroll', () => placeActivatorNearAbout(activator), { passive:true });
+  positionActivatorUnderThreeDots(activator);
 
-  // Initialize Rez scheduler based on current settings
-  scheduleRez(settings.rez);
+  // Reposition on resize (in case the three-dot moves)
+  window.addEventListener('resize', () => positionActivatorUnderThreeDots(activator));
 
-  // ---------- Functions ----------
+  // Keep a direct ref for reliable close
+  function openPanel() {
+    panel.style.display = 'block';
+    // Place panel near activator by default
+    const r = activator.getBoundingClientRect();
+    panel.style.top  = Math.round(r.bottom + 8) + 'px';
+    panel.style.left = Math.round(r.left) + 'px';
+  }
+  function onExit() {
+    panel.style.display = 'none';
+  }
+
+  // ---------- Apply handler (save → dispatch → iframe → close) ----------
+  function onApply(next) {
+    saveSettings(next);
+
+    // Update shared state for environment.js
+    window.__WINDS_SONG__.wind   = Number(next.wind);
+    window.__WINDS_SONG__.breath = Number(next.breath);
+    window.__WINDS_SONG__.elegra = Number(next.elegra);
+    window.__WINDS_SONG__.rez    = Number(next.rez);
+
+    // Broadcast to environment.js
+    window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
+
+    // Inform the background iframe (environment.html) about wind
+    postWindToEnvironment(next.wind);
+
+    // Close panel (make absolutely sure)
+    onExit();
+  }
+
+  // ---------- DOM builders ----------
   function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
+    el.style.display = 'none';
 
     el.innerHTML = `
       <div class="ws-head">
@@ -141,8 +173,7 @@
       </div>
 
       <div class="ws-help">
-        Wind = global speed. Breath = butterfly oscillation. Elegra (shown for UI consistency; reveal speed is fixed by ruleset).
-        Rez = times per hour (1 = once per refresh only).
+        Breath = butterfly arc. Elegra kept for state. Rez = times/hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
@@ -174,52 +205,32 @@
     };
     syncVals();
 
-    wind.addEventListener('input', syncVals);
+    wind.addEventListener('input',   syncVals);
     breath.addEventListener('input', syncVals);
     elegra.addEventListener('input', syncVals);
-    rez.addEventListener('input', syncVals);
+    rez.addEventListener('input',    syncVals);
 
-    // Close button
+    // Close button (X)
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Apply button (saves, dispatches, closes)
-    el.querySelector('#ws-apply').addEventListener('click', () => {
+    // Apply
+    el.querySelector('#ws-apply').addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
         breath: clampN(breath.value, 6, 30, 16),
-        elegra: clampN(elegra.value, 8, 30, 15), // kept
+        elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
       };
       onApplyCb(next);
+      // explicit hide fallback (in case onExit was blocked)
+      el.style.display = 'none';
+      // blur any active element to avoid stray focus outlines
+      try { document.activeElement && document.activeElement.blur(); } catch {}
     });
 
     return el;
-  }
-
-  function openPanel() { panel.style.display = 'block'; }
-  function onExit()    { panel.style.display = 'none'; }
-
-  function onApply(next) {
-    // Persist
-    saveSettings(next);
-
-    // Update shared state for environment.js
-    window.__WINDS_SONG__.wind   = Number(next.wind);
-    window.__WINDS_SONG__.breath = Number(next.breath);
-    window.__WINDS_SONG__.elegra = Number(next.elegra);
-    window.__WINDS_SONG__.rez    = Number(next.rez);
-
-    // Dispatch app-wide update
-    window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-
-    // Notify background iframe (environment.html) about Wind
-    postWindToEnvironment(next.wind);
-
-    // Rebuild Rez schedule
-    scheduleRez(next.rez);
-
-    // Close panel
-    onExit();
   }
 
   function buildActivator(openFn) {
@@ -231,90 +242,27 @@
     return b;
   }
 
-  function findAboutTrigger() {
-    // Try likely candidates: text "About" or IDs
-    const candidates = Array.from(document.querySelectorAll('a,button,[role="button"], #about, #menu-about, [data-menu="about"]'));
-    for (const el of candidates) {
-      const txt = (el.textContent || '').trim().toLowerCase();
-      if (txt === 'about' || el.id === 'about' || el.id === 'menu-about' || el.getAttribute('data-menu') === 'about') {
-        return el;
-      }
+  function positionActivatorUnderThreeDots(btn) {
+    // Common “three dots” / menu toggles
+    const cand = document.querySelector(
+      '.menu-toggle, .more, .kebab, [aria-label="Menu"], [aria-label="More"], .about-toggle, .menu button, .menu .trigger, nav .more'
+    );
+    if (cand) {
+      const r = cand.getBoundingClientRect();
+      btn.style.top  = Math.round(r.bottom + 8) + 'px';
+      btn.style.left = Math.round(r.left) + 'px';
+      btn.style.right = 'auto';
+      btn.style.bottom = 'auto';
+    } else {
+      // fallback: bottom-right
+      btn.style.right = '14px';
+      btn.style.bottom = '14px';
+      btn.style.top = 'auto';
+      btn.style.left = 'auto';
     }
-    return null;
   }
 
-  function placeActivatorNearAbout(activator) {
-    const about = findAboutTrigger();
-    if (!about) {
-      // fallback bottom-right, a few px above bottom to avoid any gray gutter
-      Object.assign(activator.style, { right:'14px', bottom:'14px', left:'',
-        top:'' });
-      return;
-    }
-    const r = about.getBoundingClientRect();
-    // Place a few pixels under the About trigger, left-aligned
-    const top = Math.round(r.bottom + 8 + window.scrollY);
-    const left = Math.round(r.left + window.scrollX);
-    Object.assign(activator.style, { left: left+'px', top: top+'px', right:'', bottom:'' });
-  }
-
-  // ---------- Rez scheduler (aligned to top-of-hour) ----------
-  let rezTimers = [];
-  let rezHourlyInterval = null;
-
-  function clearRezTimers() {
-    rezTimers.forEach(t => clearTimeout(t));
-    rezTimers = [];
-    if (rezHourlyInterval) { clearInterval(rezHourlyInterval); rezHourlyInterval = null; }
-  }
-
-  function scheduleRez(rezVal) {
-    clearRezTimers();
-
-    const rez = Number(rezVal) || 1;
-    if (rez <= 1) {
-      // No recurring triggers; one Wind’s Song run happens on page load only
-      return;
-    }
-
-    // helper to schedule one hour’s worth starting at a Date "hourStart"
-    function scheduleHour(hourStart) {
-      // fire rez times evenly spaced across the hour
-      for (let k=0; k<rez; k++) {
-        const minute = Math.floor(k * 60 / rez);
-        const fireAt = new Date(hourStart.getTime());
-        fireAt.setMinutes(minute, 0, 0);
-        const delay = Math.max(0, fireAt.getTime() - Date.now());
-        rezTimers.push(setTimeout(() => {
-          window.dispatchEvent(new Event('windsong:trigger'));
-        }, delay));
-      }
-    }
-
-    // align to next top-of-hour
-    const now = new Date();
-    const nextHour = new Date(now.getTime());
-    nextHour.setMinutes(0,0,0);
-    if (now.getMinutes() !== 0 || now.getSeconds() !== 0 || now.getMilliseconds() !== 0) {
-      nextHour.setHours(nextHour.getHours() + 1);
-    }
-
-    // Schedule first hour block
-    const initialDelay = Math.max(0, nextHour.getTime() - Date.now());
-    rezTimers.push(setTimeout(() => {
-      const start = new Date();
-      start.setMinutes(0,0,0);
-      scheduleHour(start);
-
-      // Repeat every hour on the hour
-      rezHourlyInterval = setInterval(() => {
-        const h = new Date();
-        h.setMinutes(0,0,0);
-        scheduleHour(h);
-      }, 60 * 60 * 1000);
-    }, initialDelay));
-  }
-
+  // ---------- Post wind multiplier to environment.html (iframe) ----------
   function postWindToEnvironment(windVal) {
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
@@ -322,13 +270,14 @@
     iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
+  // ---------- CSS injector ----------
   function injectCSS(text) {
     const tag = document.createElement('style');
     tag.textContent = text;
     document.head.appendChild(tag);
   }
 
-  // ---------- SVG icons ----------
+  // ---------- SVG icons (unchanged visuals) ----------
   function svgWind() {
     return `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -339,7 +288,6 @@
       </svg>`;
   }
   function svgBreath() {
-    // "poem ↔ poem" glyph
     return `
       <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="4" width="18" height="16" rx="2" />
