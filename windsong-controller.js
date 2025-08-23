@@ -1,10 +1,5 @@
 // windsong-controller.js
 (function () {
-  // ---------- small logger ----------
-  const LOG_TAG = '[WindSong]';
-  const log = (...a) => console.log(LOG_TAG, ...a);
-  const warn = (...a) => console.warn(LOG_TAG, ...a);
-
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
   function clampN(v, min, max, def) {
@@ -24,9 +19,7 @@
       return { wind:5, breath:16, elegra:15, rez:1 };
     }
   }
-  function saveSettings(s) {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch {}
-  }
+  function saveSettings(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
 
   // ---------- Shared state bootstrap ----------
   const settings = loadSettings();
@@ -36,37 +29,40 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  // Inform environment.html about current wind on boot (leaves speed)
-  postWindToEnvironment(window.__WINDS_SONG__.wind);
+  // Inform environment.html about current wind multiplier (so leaves speed match)
+  postWindToEnvironment(settings.wind);
 
-  // ---------- Minimal styles ----------
+  // ---------- Minimal styles (unchanged visuals) ----------
   injectCSS(`
     .ws-activator{
-      position:fixed; right:14px; bottom:14px; z-index:99998;
+      position:fixed; z-index:9998;
       width:38px; height:38px; border-radius:10px; display:grid; place-items:center;
       background:rgba(20,24,30,.55); backdrop-filter:blur(6px);
       border:1px solid rgba(255,255,255,.08); color:#cfe7ff; cursor:pointer;
       box-shadow:0 6px 18px rgba(0,0,0,.25);
+      right:14px; bottom:14px; /* fallback if About anchor not found */
     }
     .ws-activator svg{ width:20px; height:20px; opacity:.9 }
 
     .ws-panel{
-      position:fixed; right:14px; bottom:62px; z-index:99999;
+      position:fixed; z-index:9999;
       max-width:360px; width:calc(100vw - 28px);
       background:linear-gradient(180deg, rgba(15,18,24,.85), rgba(15,18,24,.90));
       border:1px solid rgba(255,255,255,.08); border-radius:14px;
-      padding:12px 12px 10px; color:#fff;
-      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      padding:12px 12px 10px; color:#fff; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
       box-shadow:0 10px 28px rgba(0,0,0,.35);
+      right:14px; bottom:62px; display:none;
     }
     .ws-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
     .ws-title{ font-weight:700; letter-spacing:.3px; color:#e9f2ff; display:flex; align-items:center; gap:8px; }
     .ws-close{ cursor:pointer; opacity:.8; }
     .ws-close:hover{ opacity:1; }
+
     .ws-row{ display:flex; align-items:center; gap:10px; margin:10px 2px; }
     .ws-icon{ width:22px; height:22px; opacity:.9; flex:0 0 auto; }
     .ws-label{ color:#cfe7ff; min-width:72px; }
     .ws-slider{ flex:1; display:flex; align-items:center; gap:8px; }
+
     .ws-slider input[type="range"]{ width:100%; -webkit-appearance:none; height:4px; background:#2a3444; border-radius:6px; outline:none; }
     .ws-slider input[type="range"]::-webkit-slider-thumb{
       -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
@@ -74,6 +70,7 @@
       box-shadow:0 0 0 3px rgba(141,198,255,.15);
     }
     .ws-val{ width:36px; text-align:right; color:#a9c6ff; opacity:.95; font-variant-numeric:tabular-nums; }
+
     .ws-help{ color:#9fb4d8; opacity:.85; font-size:12px; margin:6px 4px 2px; }
     .ws-actions{ display:flex; gap:8px; margin-top:10px; }
     .ws-btn{
@@ -83,43 +80,30 @@
     .ws-btn.primary{ background:rgba(141,198,255,.22); }
     .ws-btn:hover{ filter:brightness(1.05); }
 
-    /* In-menu item */
-    #windsong-menu-item.ws-menu-item{ cursor:pointer; }
+    /* Optional: menu item if a site menu exists (we do NOT use it now; activator floats) */
+    .ws-menu-item{ cursor:pointer; }
   `);
 
   // ---------- Build UI ----------
-  const panel = buildPanel(settings, onApply, onTriggerNow, onExit);
-  panel.style.display = 'none';
+  const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
-  // ALWAYS show floating activator (reliable entry)
+  // Always use floating activator, but try to anchor it under the About (three-dot) menu
   const activator = buildActivator(openPanel);
   document.body.appendChild(activator);
-
-  // ALSO try to add “WindSong” into your site menu (next to About / About!)
-  attachMenuRobust(openPanel);
-
-  // Keep panel knobs synced if something else updates them
-  window.addEventListener('windsong:update', () => {
-    const s = window.__WINDS_SONG__ || settings;
-    const map = {
-      '#ws-wind': s.wind, '#ws-breath': s.breath, '#ws-elegra': s.elegra, '#ws-rez': s.rez
-    };
-    for (const sel in map) {
-      const input = panel.querySelector(sel);
-      const val   = panel.querySelector(sel + '-val');
-      if (input) input.value = String(map[sel]);
-      if (val)   val.textContent = String(map[sel]);
-    }
-  });
+  anchorActivatorUnderAbout(activator);
 
   // ---------- Functions ----------
-  function buildPanel(initVals, onApplyCb, onTriggerCb, onExitCb) {
+  function buildPanel(initVals, onApplyCb, onExitCb) {
     const el = document.createElement('div');
     el.className = 'ws-panel';
+
     el.innerHTML = `
       <div class="ws-head">
-        <div class="ws-title">${svgWind()} <span>WindSong</span></div>
+        <div class="ws-title">
+          ${svgWind()}
+          <span>WindSong</span>
+        </div>
         <div class="ws-close" title="Close">${svgClose()}</div>
       </div>
 
@@ -160,17 +144,15 @@
       </div>
 
       <div class="ws-help">
-        Breath = seconds between drifting lines. Elegra = reveal pacing (seconds).
-        Rez = times per hour (1 = once per refresh).
+        Wind = speed of all moving elements. Breath = butterfly motion character. Elegra = reveal pacing (seconds). Rez = times per hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
-        <div class="ws-btn" id="ws-trigger">Trigger now</div>
         <div class="ws-btn primary" id="ws-apply">Apply</div>
       </div>
     `;
 
-    // Wire inputs + initial values
+    // Inputs + initial values
     const wind   = el.querySelector('#ws-wind');
     const breath = el.querySelector('#ws-breath');
     const elegra = el.querySelector('#ws-elegra');
@@ -199,10 +181,10 @@
     elegra.addEventListener('input', syncVals);
     rez.addEventListener('input', syncVals);
 
-    // Close (X)
+    // Close button (X)
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
-    // Buttons
+    // Apply (saves, broadcasts, and closes)
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
         wind:   clampN(wind.value,   1, 10, 5),
@@ -210,33 +192,35 @@
         elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
       };
-      onApplyCb(next);   // also closes panel
+      onApplyCb(next);
     });
-    el.querySelector('#ws-trigger').addEventListener('click', () => { onTriggerCb(); });
 
     return el;
   }
 
-  function openPanel() { panel.style.display = 'block'; }
-  function onExit()    { panel.style.display = 'none'; }
+  function openPanel() { document.querySelector('.ws-panel').style.display = 'block'; }
+  function onExit()     { document.querySelector('.ws-panel').style.display = 'none'; }
 
   function onApply(next) {
+    // Persist
     saveSettings(next);
+
+    // Update shared state for environment.js (drift/reveal/butterflies)
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
     window.__WINDS_SONG__.elegra = Number(next.elegra);
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
+    // Dispatch app-wide event
     window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
+
+    // Inform the background iframe (environment.html) about wind speed as well
     postWindToEnvironment(next.wind);
+
+    // Close panel
     onExit();
   }
 
-  function onTriggerNow() {
-    window.dispatchEvent(new Event('windsong:trigger'));
-  }
-
-  // Floating button (always present)
   function buildActivator(openFn) {
     const b = document.createElement('div');
     b.className = 'ws-activator';
@@ -246,100 +230,54 @@
     return b;
   }
 
-  // -------- Robust menu attach (next to “About” / “About!” if present) --------
-  function normalizeText(t) {
-    return (t || '')
-      .toLowerCase()
-      .replace(/[\s\p{P}\p{S}]+/gu, '') // remove spaces/punctuation/symbols
-      .trim();
+  // Try to position the activator a few pixels UNDER the three-dot About menu
+  function anchorActivatorUnderAbout(btn) {
+    const anchor = findAboutAnchor();
+    if (!anchor) return; // keep fallback bottom-right
+
+    function place() {
+      try {
+        const r = anchor.getBoundingClientRect();
+        // place 10px below the anchor, right-aligned to its right edge
+        btn.style.top = Math.round(window.scrollY + r.bottom + 10) + 'px';
+        btn.style.left = Math.round(window.scrollX + r.right - btn.offsetWidth) + 'px';
+        btn.style.right = 'auto';
+        btn.style.bottom = 'auto';
+      } catch {}
+    }
+    place();
+    window.addEventListener('resize', place, { passive: true });
+    window.addEventListener('scroll', place, { passive: true });
   }
 
-  function findMenuCandidate(doc){
-    if (!doc) return null;
-
-    // 1) obvious containers
-    const cand = doc.querySelector('[data-menu], nav .menu-list, nav ul, .menu, .site-menu, .main-menu, header nav ul, nav, .wrap .menu');
-    if (cand) return cand;
-
-    // 2) locate “About” / “About!” item
-    const nodes = Array.from(doc.querySelectorAll('a, li, div, span, button'));
-    const aboutNode = nodes.find(el => normalizeText(el.textContent) === 'about');
-    if (aboutNode && aboutNode.parentElement) return aboutNode.parentElement;
-
+  function findAboutAnchor() {
+    // Heuristics: look for an element that seems to be the three-dot menu or an About trigger
+    // Try common selectors first
+    const candidates = [
+      '.menu .dots', '.dots', '.menu [aria-label="Menu"]', '.menu button',
+      'nav .dots', 'nav button', '.about-trigger', '[data-about-trigger]'
+    ];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    // Fallback: any element containing text "About" (not perfect, but safe)
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while ((node = walker.nextNode())) {
+      try {
+        const t = (node.textContent || '').trim().toLowerCase();
+        if (t === 'about' || t === 'about!') return node;
+      } catch {}
+    }
     return null;
   }
 
-  function createMenuItemLike(siblingTag) {
-    const t = (siblingTag || '').toLowerCase();
-    if (t === 'a')   { const a=document.createElement('a'); a.href='#'; return a; }
-    if (t === 'li')  return document.createElement('li');
-    if (t === 'div') return document.createElement('div');
-    // reasonable default
-    return document.createElement('div');
-  }
-
-  function insertMenuItem(doc, openFn){
-    const menu = findMenuCandidate(doc);
-    if (!menu) { log('menu not found'); return false; }
-    if (doc.getElementById('windsong-menu-item')) { log('menu item already present'); return true; }
-
-    // Try to detect a sibling to match tag
-    const children = Array.from(menu.children);
-    const sibling  = children.find(n => normalizeText(n.textContent) === 'about') || children[0];
-
-    const tagToMatch = sibling ? sibling.tagName : 'DIV';
-    const item = createMenuItemLike(tagToMatch);
-    item.id = 'windsong-menu-item';
-    item.className = (tagToMatch.toLowerCase() === 'li') ? 'ws-menu-item' : 'ws-menu-item';
-    item.style.cssText = 'padding:6px 10px; opacity:.9;';
-    item.textContent = 'WindSong';
-
-    item.addEventListener('click', (e)=>{ e.preventDefault(); openFn(); });
-
-    try {
-      if (sibling && sibling.nextSibling) {
-        menu.insertBefore(item, sibling.nextSibling);
-      } else {
-        menu.appendChild(item);
-      }
-      log('menu item inserted as', `<${tagToMatch.toLowerCase()}>`);
-      return true;
-    } catch (e) {
-      warn('failed to insert menu item', e);
-      return false;
-    }
-  }
-
-  function attachMenuRobust(openFn){
-    // immediate attempt
-    if (insertMenuItem(document, openFn)) return true;
-
-    // retries (for late-rendered menus)
-    let tries = 0;
-    const t = setInterval(()=>{
-      tries++;
-      if (insertMenuItem(document, openFn) || tries > 15) {
-        clearInterval(t);
-      }
-    }, 250);
-
-    // mutation observer safety net
-    const mo = new MutationObserver(() => {
-      if (insertMenuItem(document, openFn)) {
-        mo.disconnect();
-      }
-    });
-    mo.observe(document.body, { childList:true, subtree:true });
-
-    return false;
-  }
-
-  // ---------- helpers ----------
   function postWindToEnvironment(windVal) {
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
     const wind = Number(windVal) || 5;
-    try { iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*'); } catch {}
+    iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
   function injectCSS(text) {
@@ -351,17 +289,17 @@
   // ---------- SVG icons ----------
   function svgWind() {
     return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M3 8h10a3 3 0 1 0-3-3" />
-        <path d="M3 12h14a3 3 0 1 1-3 3" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 8c4 0 6-2 9-2 2.5 0 3.5 1.5 3.5 2.8 0 1.2-1 2.2-2.3 2.2" />
+        <path d="M3 12h10c2 0 3-1 3-2.2C16 8.5 15 7 12.5 7" />
+        <path d="M3 16c5 0 8-2 12-2 2 0 3 1.2 3 2.2 0 1.2-1 2.8-3.2 2.8" />
+        <path d="M6 9c.8-.6 1.5-1.2 2.2-1.8" />
       </svg>`;
   }
   function svgBreath() {
-    // poem ↔ poem
+    // "poem ↔ poem" glyph
     return `
-      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="4" width="18" height="16" rx="2" />
         <rect x="44" y="4" width="18" height="16" rx="2" />
         <path d="M22 12h20" />
@@ -371,23 +309,20 @@
   }
   function svgElegra() {
     return `
-      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6"
-           stroke-linecap="round" aria-hidden="true">
+      <svg viewBox="0 0 64 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <path d="M2 12 C10 4, 18 20, 26 12 S42 4, 50 12 S58 20, 62 12" />
       </svg>`;
   }
   function svgClock() {
     return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9"></circle>
         <path d="M12 7v5l3 2"></path>
       </svg>`;
   }
   function svgClose() {
     return `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M18 6L6 18M6 6l12 12"></path>
       </svg>`;
   }
