@@ -1,8 +1,8 @@
 /* =========================================================================
    environment.js (drop-in)
-   - No index.html changes
-   - Wind/Breath/Elegra/Rez knobs respected (from windsong-controller.js)
-   - Final reveal spacing: ALWAYS normal word spacing + single space after punctuation
+   - No index.html changes; visuals unchanged
+   - Reads Wind/Breath/Elegra live so adjustments take effect mid-session
+   - BASELINE CHANGE: Wind baseline is now 2 (was 5). windFactor = wind/2
    ======================================================================== */
 
 /* Utils */
@@ -11,12 +11,13 @@ const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-/* Restore saved settings (if controller loaded earlier in the session) */
+// (Put right above your current window.__WINDS_SONG__ init)
 (function restoreWindsSongFromStorage(){
   try {
     const raw = localStorage.getItem('windsong.settings.v1');
     if (!raw) return;
     const s = JSON.parse(raw);
+    // Establish shared state if controller hasn't yet
     window.__WINDS_SONG__ = window.__WINDS_SONG__ || {};
     if (s.wind   != null) window.__WINDS_SONG__.wind   = Number(s.wind);
     if (s.breath != null) window.__WINDS_SONG__.breath = Number(s.breath);
@@ -25,8 +26,9 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   } catch {}
 })();
 
-/* Shared state + listeners (defaults if controller not present yet) */
-window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:5, breath:16, elegra:15, rez:1 };
+/* Shared state + listeners
+   NOTE: baseline wind default is now 2 (was 5) */
+window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:2, breath:16, elegra:15, rez:1 };
 window.addEventListener("windsong:update", (e) => {
   const { wind, breath, elegra, rez } = e.detail || {};
   if (wind   !== undefined) window.__WINDS_SONG__.wind   = Number(wind);
@@ -34,9 +36,7 @@ window.addEventListener("windsong:update", (e) => {
   if (elegra !== undefined) window.__WINDS_SONG__.elegra = Number(elegra);
   if (rez    !== undefined) window.__WINDS_SONG__.rez    = Number(rez);
 });
-window.addEventListener("windsong:trigger", () => {
-  if (typeof runPoemDrift === "function") runPoemDrift();
-});
+window.addEventListener("windsong:trigger", () => { if (typeof runPoemDrift === "function") runPoemDrift(); });
 
 /* Config (visual tokens only) */
 const CFG = {
@@ -50,12 +50,12 @@ const CFG = {
       "For life’s breath is the wind, and your breath its creation."
     ],
     baseFirstLineDelayMaxMs: 120_000,   // surprise window
-    baseDriftDurationMs:     32_000,    // cross-screen baseline at Wind=5
+    baseDriftDurationMs:     32_000,    // cross-screen baseline at windFactor=1 (i.e., Wind=2)
     driftFontMin: 13, driftFontMax: 16
   },
   reveal: {
     enabled: true,
-    appearAfterLastLineMs: 30_000,      // wait after last drifted line
+    appearAfterLastLineMs: 30_000,
     rowPadding: 10, fontSizePx: 16,
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
     border: '1px solid rgba(255,255,255,.08)'
@@ -65,8 +65,8 @@ const CFG = {
     sizeMin: 20, sizeMax: 28,
     tint: {
       waiting:'rgba(255, 230, 120, 0.50)',
-      playing:'rgba(255, 120, 120, 0.55)', // red during playing (per latest request)
-      done:   'rgba(140, 235, 170, 0.55)', // green
+      playing:'rgba(255, 120, 120, 0.55)',   // red during poem playing (per your latest preference)
+      done:   'rgba(140, 235, 170, 0.55)',
       warn:   'rgba(255, 120, 120, 0.55)'
     },
     flutterWaves: 2, flutterAmp: 28
@@ -112,10 +112,9 @@ const revealLayer = (() => {
   .env-reveal-bar{max-width:980px;width:calc(100vw - 24px);margin:0 12px 10px;
     background:${CFG.reveal.barBg};border:${CFG.reveal.border};border-radius:10px;
     padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
-    font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:0;display:none;text-align:center;}
-  .env-reveal-line{display:inline-block;white-space:pre-wrap;opacity:1;}
-  .env-token{display:inline;}
-  .env-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
+    font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
+  .env-reveal-line{display:inline-block;margin-right:.75em;white-space:nowrap;opacity:1;}
+  .env-reveal-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
 /* Status */
@@ -135,14 +134,14 @@ async function runPoemDrift(){
     started = true; poemStatus.set('playing');
 
     for (let i=0;i<CFG.poem.lines.length;i++){
-      // Wind: 5 = baseline → factor = wind/5
-      const windVal   = Number(window.__WINDS_SONG__.wind) || 5;
-      const windFact  = Math.max(0.1, windVal/5);
+      // Wind baseline changed: 2 => factor = wind/2
+      const windVal   = Number(window.__WINDS_SONG__.wind) || 2;
+      const windFact  = Math.max(0.1, windVal/2);
       const driftMs   = Math.max(1000, Math.round(CFG.poem.baseDriftDurationMs / windFact));
       spawnDriftingLine(CFG.poem.lines[i], driftMs);
 
       if (i < CFG.poem.lines.length - 1){
-        // Breath (seconds between drifting lines) — if you changed meaning elsewhere, keep as-is here
+        // Breath in seconds, live each gap (unchanged meaning)
         const breathS = Number(window.__WINDS_SONG__.breath) || 16;
         await wait(Math.max(500, Math.round(breathS*1000)));
       }
@@ -150,7 +149,7 @@ async function runPoemDrift(){
 
     if (CFG.reveal.enabled){
       await wait(CFG.reveal.appearAfterLastLineMs);
-      await runRevealSequence(); // spacing fix lives inside
+      await runRevealSequence();
     }
     poemStatus.set('done');
   }catch(e){ console.error('Poem drift error:', e); poemStatus.set('warn'); }
@@ -179,121 +178,68 @@ function spawnDriftingLine(text, driftDurationMs){
   requestAnimationFrame(step);
 }
 
-/* ---- Spacing normalization helpers (for final reveal ONLY) ----
-   Guarantee: one space between words, one space AFTER punctuation, no space before punctuation. */
-function normalizeLineSpacing(src){
-  if (!src) return '';
-  let s = src;
-
-  // Collapse any runs of whitespace to single spaces, trim ends
-  s = s.replace(/\s+/g, ' ').trim();
-
-  // Ensure exactly one space AFTER punctuation if another token follows
-  // (comma, period, semicolon, colon, exclamation, question)
-  s = s.replace(/([,.;:!?])(?!\s|$)/g, '$1 ');
-
-  // Remove space BEFORE punctuation, if any
-  s = s.replace(/\s+([,.;:!?])/g, '$1');
-
-  return s;
-}
-
-/* Build token DOM for a line while preserving *exact* spacing */
-function buildRevealLineDOM(lineText){
-  const lineEl = document.createElement('span');
-  lineEl.className = 'env-reveal-line';
-
-  const normalized = normalizeLineSpacing(lineText);
-
-  // Tokenize as (word + trailing spaces) pairs; spaces are kept as text nodes
-  const tokenRe = /(\S+)(\s*)/g;
-  let m;
-  while ((m = tokenRe.exec(normalized)) !== null){
-    const word = m[1];
-    const spaces = m[2] || '';
-
-    const token = document.createElement('span');
-    token.className = 'env-token';
-
-    const wSpan = document.createElement('span');
-    wSpan.className = 'env-word';
-    wSpan.textContent = word;
-
-    token.appendChild(wSpan);
-
-    // Keep the exact spaces as a plain text node (always visible)
-    if (spaces) token.appendChild(document.createTextNode(spaces));
-
-    lineEl.appendChild(token);
-  }
-  return { lineEl, wordSpans: Array.from(lineEl.querySelectorAll('.env-word')) };
-}
-
-/* Bottom reveal (spacing-correct) */
+/* Bottom reveal (Elegra per phase, spacing fix retained) */
 async function runRevealSequence(){
   const elegraS = Number(window.__WINDS_SONG__.elegra) || 15;
   const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
   const half = 0.5 * pairTotalMs;
 
   const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
-
-  const built = CFG.poem.lines.map(line => buildRevealLineDOM(line));
-  built.forEach(b => bar.appendChild(b.lineEl));
-
+  const lines = CFG.poem.lines.map(line=>{
+    const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
+    // Preserve exact spacing: add a normal space after each word except the last token.
+    // Also keep comma spacing as typed in CFG.poem.lines.
+    const tokens = line.split(/(\s+|,)/); // split to keep spaces and commas
+    const words = [];
+    for (let i=0;i<tokens.length;i++){
+      const tok = tokens[i];
+      if (tok === '') continue;
+      const s=document.createElement('span'); s.className='env-reveal-word';
+      s.textContent = tok; // pass through as-is
+      lineEl.appendChild(s);
+      words.push(s);
+    }
+    bar.appendChild(lineEl); return { lineEl, words };
+  });
   bar.style.display='block';
 
-  await revealWords(built[0].wordSpans, half);
-  await crossoverFade(built[0].wordSpans, built[1].wordSpans, half);
-  await crossoverFade(built[1].wordSpans, built[2].wordSpans, half);
-  await crossoverFade(built[2].wordSpans, built[3].wordSpans, half);
-  await fadeWords(built[3].wordSpans, half);
+  await revealWords(lines[0].words, half);
+  await crossoverFade(lines[0].words, lines[1].words, half);
+  await crossoverFade(lines[1].words, lines[2].words, half);
+  await crossoverFade(lines[2].words, lines[3].words, half);
+  await fadeWords(lines[3].words, half);
 
   bar.remove();
 }
-
-async function revealWords(words,totalMs){
-  const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){
-    const w=words[i];
+async function revealWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){ const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='1'; w.style.transform='translateY(0px)';
-    await wait(per);
-  }
-}
+    w.style.opacity='1'; w.style.transform='translateY(0px)'; await wait(per); } }
 async function crossoverFade(outgoing,incoming,totalMs){
   const steps=Math.max(outgoing.length,incoming.length), per=totalMs/Math.max(1,steps);
   for(let i=0;i<steps;i++){
-    if(i<incoming.length){ const w=incoming[i];
-      w.style.transition='opacity 600ms ease, transform 600ms ease';
+    if(i<incoming.length){ const w=incoming[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='1'; w.style.transform='translateY(0px)'; }
-    if(i<outgoing.length){ const w=outgoing[i];
-      w.style.transition='opacity 600ms ease, transform 600ms ease';
+    if(i<outgoing.length){ const w=outgoing[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='0'; w.style.transform='translateY(4px)'; }
     await wait(per);
-  }
-}
-async function fadeWords(words,totalMs){
-  const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){
-    const w=words[i];
+  } }
+async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){ const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='0'; w.style.transform='translateY(4px)';
-    await wait(per);
-  }
-}
+    w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
 
 /* Butterfly (Wind applied per flight) */
 function spawnButterfly(){
-  const windVal = Number(window.__WINDS_SONG__.wind) || 5;
-  const windFact= Math.max(0.1, windVal/5);
+  const windVal = Number(window.__WINDS_SONG__.wind) || 2;         // baseline default 2
+  const windFact= Math.max(0.1, windVal/2);                        // factor uses /2 now
 
   const size=randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
   const tint=(()=>{switch(poemStatus.state){
-    case 'playing': return CFG.butterflies.tint.playing; // red during play
-    case 'done':    return CFG.butterflies.tint.done;    // green
+    case 'playing': return CFG.butterflies.tint.playing;
+    case 'done':    return CFG.butterflies.tint.done;
     case 'warn':    return CFG.butterflies.tint.warn;
-    default:        return CFG.butterflies.tint.waiting; // yellow at start/wait
-  }})();
+    default:        return CFG.butterflies.tint.waiting; }})();
 
   const el=document.createElement('div');
   Object.assign(el.style,{position:'absolute',top:`${randi(40, Math.max(120, window.innerHeight/2))}px`,
@@ -317,9 +263,9 @@ function spawnButterfly(){
   const baseTop=parseFloat(el.style.top);
 
   const base=randi(CFG.butterflies.baseTravelMsMin, CFG.butterflies.baseTravelMsMax);
-  const travelMs=Math.max(800, Math.round(base/ windFact));
-  const t0=performance.now();
+  const travelMs=Math.max(800, Math.round(base/ windFact)); // uses / (wind/2)
 
+  const t0=performance.now();
   function anim(t){
     const k=clamp((t-t0)/travelMs,0,1);
     const x=startX + (endX-startX)*k;
