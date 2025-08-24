@@ -120,7 +120,7 @@ const revealLayer = (() => {
     display:inline-flex;
     flex-wrap:nowrap;
     align-items:baseline;
-    gap:.45ch;                /* primary spacing mechanism */
+    gap:.25ch;                /* primary spacing mechanism */
     white-space:nowrap;
     opacity:1;
   }
