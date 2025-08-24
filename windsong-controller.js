@@ -2,23 +2,29 @@
 (function () {
   // ---------- Storage helpers ----------
   const STORE_KEY = 'windsong.settings.v1';
+  function clampN(v, min, max, def) {
+    v = Number(v);
+    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
+  }
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       return {
-        wind:   clampN(s.wind,   1, 10, 2),   // baseline now 2
-        breath: clampN(s.breath, 0,  100, 20), // butterfly oscillation
+        // Baseline wind = 2 (slower default)
+        wind:   clampN(s.wind,   1, 10, 2),
+        // Breath = butterfly oscillation amplitude ONLY (not poem spacing)
+        breath: clampN(s.breath, 0, 100, 20),
+        // Elegra = final bottom reveal pacing (seconds)
         elegra: clampN(s.elegra, 8,  30, 15),
+        // Rez = times per hour; 1 = once per refresh
         rez:    clampN(s.rez,    1,   6,  1),
       };
-    } catch { return { wind:2, breath:20, elegra:15, rez:1 }; } // fallback baseline = 2
+    } catch {
+      return { wind: 2, breath: 20, elegra: 15, rez: 1 };
+    }
   }
   function saveSettings(s) {
     localStorage.setItem(STORE_KEY, JSON.stringify(s));
-  }
-  function clampN(v, min, max, def) {
-    v = Number(v);
-    return Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : def;
   }
 
   // ---------- Shared state bootstrap ----------
@@ -29,7 +35,10 @@
   if (window.__WINDS_SONG__.elegra == null) window.__WINDS_SONG__.elegra = settings.elegra;
   if (window.__WINDS_SONG__.rez    == null) window.__WINDS_SONG__.rez    = settings.rez;
 
-  postWindToEnvironment(settings.wind);
+  // Push initial state immediately so env picks baseline=2 before anims ramp
+  broadcastUpdate(settings);
+  // Post once again after window load to avoid any race with late iframes
+  window.addEventListener('load', () => broadcastUpdate(settings), { once: true });
 
   // ---------- Minimal styles (unchanged look) ----------
   injectCSS(`
@@ -81,6 +90,7 @@
   const panel = buildPanel(settings, onApply, onExit);
   document.body.appendChild(panel);
 
+  // Floating activator a few px under the three-dot menu (top-right)
   const activator = buildActivator(openPanel);
   document.body.appendChild(activator);
   positionActivatorNearThreeDots(activator);
@@ -137,7 +147,7 @@
       </div>
 
       <div class="ws-help">
-        Breath = butterfly oscillation. Elegra = reveal pacing (s). Rez = times/hour (1 = once per refresh).
+        Breath = butterfly oscillation. Elegra = <b>final reveal</b> pacing (seconds). Rez = times/hour (1 = once per refresh).
       </div>
 
       <div class="ws-actions">
@@ -145,6 +155,7 @@
       </div>
     `;
 
+    // Wire inputs + initial values
     const wind   = el.querySelector('#ws-wind');
     const breath = el.querySelector('#ws-breath');
     const elegra = el.querySelector('#ws-elegra');
@@ -173,11 +184,13 @@
     elegra.addEventListener('input', syncVals);
     rez.addEventListener('input', syncVals);
 
+    // Close button
     el.querySelector('.ws-close').addEventListener('click', onExitCb);
 
+    // Apply = save, broadcast, close
     el.querySelector('#ws-apply').addEventListener('click', () => {
       const next = {
-        wind:   clampN(wind.value,   1, 10, 2), // baseline 2
+        wind:   clampN(wind.value,   1, 10, 2),  // baseline default now 2
         breath: clampN(breath.value, 0, 100, 20),
         elegra: clampN(elegra.value, 8, 30, 15),
         rez:    clampN(rez.value,    1,  6,  1),
@@ -202,21 +215,28 @@
     p.style.display = 'block';
   }
   function onExit() {
-    document.querySelector('.ws-panel').style.display = 'none';
+    const p = document.querySelector('.ws-panel');
+    if (p) p.style.display = 'none';
   }
 
   function onApply(next) {
     saveSettings(next);
 
+    // Update shared state (environment.js reads this)
     window.__WINDS_SONG__.wind   = Number(next.wind);
     window.__WINDS_SONG__.breath = Number(next.breath);
-    window.__WINDS_SONG__.elegra = Number(next.elegra);
+    window.__WINDS_SONG__.elegra = Number(next.elegra); // final reveal pacing
     window.__WINDS_SONG__.rez    = Number(next.rez);
 
-    window.dispatchEvent(new CustomEvent('windsong:update', { detail: next }));
-    postWindToEnvironment(next.wind);
-
+    broadcastUpdate(next);
     onExit();
+  }
+
+  function broadcastUpdate(payload) {
+    // Top-document listeners
+    window.dispatchEvent(new CustomEvent('windsong:update', { detail: payload }));
+    // Background iframe (environment.html) wind sync
+    postWindToEnvironment(payload.wind);
   }
 
   function buildActivator(openFn) {
@@ -228,16 +248,16 @@
     return b;
   }
 
+  // Position under the three-dot menu (top-right). We don’t modify index.html.
   function positionActivatorNearThreeDots(node) {
     const candidates = document.querySelectorAll(
-      '.three-dots, .menu-toggle, .menu button, nav .menu button, .about-menu, [data-role="menu"]'
+      '.three-dots, .menu-toggle, .menu button, nav .menu button, .about-menu, [data-role="menu"], .menu, nav'
     );
     let anchor = null;
     for (const el of candidates) {
       const rect = el.getBoundingClientRect();
       if (rect.width && rect.height) { anchor = el; break; }
     }
-
     if (anchor) {
       const r = anchor.getBoundingClientRect();
       node.style.top = `${Math.max(8, r.bottom + 8)}px`;
@@ -255,7 +275,7 @@
   function postWindToEnvironment(windVal) {
     const iframe = document.getElementById('environment-iframe');
     if (!iframe || !iframe.contentWindow) return;
-    const wind = Number(windVal) || 2; // baseline 2
+    const wind = Number(windVal) || 2; // assume 2 if missing
     iframe.contentWindow.postMessage({ type: 'WIND_UPDATE', wind }, '*');
   }
 
