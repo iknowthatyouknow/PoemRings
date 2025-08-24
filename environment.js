@@ -1,10 +1,8 @@
 /* =========================================================================
    environment.js (drop-in)
-   - No index.html changes; visuals unchanged
-   - Reads Wind/Breath/Elegra live so adjustments take effect mid-session
-   - 5 on the Wind slider = current baseline speed
-   - Final reveal waits for last drifting line to finish, THEN +30s before starting
-   - FINAL SPACING FIX: spacing handled by CSS (inline-flex + gap), not text spaces
+   - No index.html changes
+   - Wind/Breath/Elegra/Rez knobs respected (from windsong-controller.js)
+   - Final reveal spacing: ALWAYS normal word spacing + single space after punctuation
    ======================================================================== */
 
 /* Utils */
@@ -13,7 +11,7 @@ const rand  = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// (restore any saved settings before we read them)
+/* Restore saved settings (if controller loaded earlier in the session) */
 (function restoreWindsSongFromStorage(){
   try {
     const raw = localStorage.getItem('windsong.settings.v1');
@@ -27,7 +25,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   } catch {}
 })();
 
-/* Shared state + listeners */
+/* Shared state + listeners (defaults if controller not present yet) */
 window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind:5, breath:16, elegra:15, rez:1 };
 window.addEventListener("windsong:update", (e) => {
   const { wind, breath, elegra, rez } = e.detail || {};
@@ -36,7 +34,9 @@ window.addEventListener("windsong:update", (e) => {
   if (elegra !== undefined) window.__WINDS_SONG__.elegra = Number(elegra);
   if (rez    !== undefined) window.__WINDS_SONG__.rez    = Number(rez);
 });
-window.addEventListener("windsong:trigger", () => { if (typeof runPoemDrift === "function") runPoemDrift(); });
+window.addEventListener("windsong:trigger", () => {
+  if (typeof runPoemDrift === "function") runPoemDrift();
+});
 
 /* Config (visual tokens only) */
 const CFG = {
@@ -55,7 +55,7 @@ const CFG = {
   },
   reveal: {
     enabled: true,
-    appearAfterLastLineMs: 30_000,      // counted AFTER last line fully exits
+    appearAfterLastLineMs: 30_000,      // wait after last drifted line
     rowPadding: 10, fontSizePx: 16,
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
     border: '1px solid rgba(255,255,255,.08)'
@@ -64,8 +64,8 @@ const CFG = {
     baseTravelMsMin: 18_000, baseTravelMsMax: 26_000,
     sizeMin: 20, sizeMax: 28,
     tint: {
-      waiting:'rgba(255, 230, 120, 0.50)', // yellow
-      playing:'rgba(255, 120, 120, 0.55)', // red (while poem playing)
+      waiting:'rgba(255, 230, 120, 0.50)',
+      playing:'rgba(255, 120, 120, 0.55)', // red during playing (per latest request)
       done:   'rgba(140, 235, 170, 0.55)', // green
       warn:   'rgba(255, 120, 120, 0.55)'
     },
@@ -104,40 +104,24 @@ const revealLayer = (() => {
   return el;
 })();
 
-/* Styles (SPACING FIX: inline-flex + gap + fallback margin-left) */
+/* Styles */
 (()=>{ const css = `
   .env-poem-line{position:absolute;white-space:nowrap;color:${CFG.colors.poemLine};
     text-shadow:0 1px 3px ${CFG.colors.poemShadow};opacity:.95;font-weight:600;letter-spacing:.2px;
     user-select:none;will-change:transform,opacity;pointer-events:none;}
-
   .env-reveal-bar{max-width:980px;width:calc(100vw - 24px);margin:0 12px 10px;
     background:${CFG.reveal.barBg};border:${CFG.reveal.border};border-radius:10px;
     padding:${CFG.reveal.rowPadding}px 14px;color:${CFG.colors.reveal};
-    font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:.2px;display:none;text-align:center;}
-
-  /* Each line lays out words with a fixed visual gap, independent of text spaces */
-  .env-reveal-line{
-    display:inline-flex;
-    flex-wrap:nowrap;
-    align-items:baseline;
-    gap:.25ch;                /* primary spacing mechanism */
-    white-space:nowrap;
-    opacity:1;
-  }
-  .env-reveal-word{
-    display:inline-block;
-    opacity:0;
-    will-change:opacity,transform;
-    transform:translateY(4px);
-  }
-  /* Fallback spacing for engines without flex-gap support */
-  .env-reveal-word + .env-reveal-word { margin-left:.45ch; }
+    font-size:${CFG.reveal.fontSizePx}px;line-height:1.4;letter-spacing:0;display:none;text-align:center;}
+  .env-reveal-line{display:inline-block;white-space:pre-wrap;opacity:1;}
+  .env-token{display:inline;}
+  .env-word{display:inline-block;opacity:0;will-change:opacity,transform;transform:translateY(4px);}
 `; const tag=document.createElement('style'); tag.textContent=css; document.head.appendChild(tag);})();
 
 /* Status */
 const poemStatus = { state:'waiting', set(next){ this.state = next; } };
 
-/* Poem drift (live knobs applied per line; waits for last line completion) */
+/* Poem drift (live knobs applied per line) */
 let __windsSongRunInProgress = false;
 async function runPoemDrift(){
   if (__windsSongRunInProgress) return;
@@ -150,62 +134,102 @@ async function runPoemDrift(){
     await wait(firstDelayMs);
     started = true; poemStatus.set('playing');
 
-    let lastLinePromise = null;
-
     for (let i=0;i<CFG.poem.lines.length;i++){
+      // Wind: 5 = baseline → factor = wind/5
       const windVal   = Number(window.__WINDS_SONG__.wind) || 5;
       const windFact  = Math.max(0.1, windVal/5);
       const driftMs   = Math.max(1000, Math.round(CFG.poem.baseDriftDurationMs / windFact));
-
-      const p = spawnDriftingLine(CFG.poem.lines[i], driftMs);
-      lastLinePromise = p;
+      spawnDriftingLine(CFG.poem.lines[i], driftMs);
 
       if (i < CFG.poem.lines.length - 1){
+        // Breath (seconds between drifting lines) — if you changed meaning elsewhere, keep as-is here
         const breathS = Number(window.__WINDS_SONG__.breath) || 16;
         await wait(Math.max(500, Math.round(breathS*1000)));
       }
     }
 
-    // Wait until the last line actually exits the screen
-    if (lastLinePromise) await lastLinePromise;
-
-    // Then wait +30s and start bottom reveal
     if (CFG.reveal.enabled){
       await wait(CFG.reveal.appearAfterLastLineMs);
-      await runRevealSequence();
+      await runRevealSequence(); // spacing fix lives inside
     }
     poemStatus.set('done');
   }catch(e){ console.error('Poem drift error:', e); poemStatus.set('warn'); }
   finally{ __windsSongRunInProgress=false; }
 }
-
-/* A drifting line that resolves when removed */
 function spawnDriftingLine(text, driftDurationMs){
-  return new Promise((resolve)=>{
-    const el = document.createElement('div');
-    el.className='env-poem-line'; el.textContent=text;
-    const fs = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
-    el.style.fontSize = fs+'px';
-    const minY=90, maxY=Math.max(minY+60, window.innerHeight-100);
-    el.style.top = randi(minY, maxY)+'px';
-    const startX = -Math.max(120, text.length*(fs*0.6));
-    const endX   = window.innerWidth + 80;
-    poemLayer.appendChild(el);
+  const el = document.createElement('div');
+  el.className='env-poem-line'; el.textContent=text;
+  const fs = randi(CFG.poem.driftFontMin, CFG.poem.driftFontMax);
+  el.style.fontSize = fs+'px';
+  const minY=90, maxY=Math.max(minY+60, window.innerHeight-100);
+  el.style.top = randi(minY, maxY)+'px';
+  const startX = -Math.max(120, text.length*(fs*0.6));
+  const endX   = window.innerWidth + 80;
+  poemLayer.appendChild(el);
 
-    const t0 = performance.now(), peak=0.95;
-    function step(t){
-      const k = clamp((t-t0)/driftDurationMs,0,1);
-      const x = startX + (endX - startX)*k;
-      el.style.transform = `translate(${x}px,0)`;
-      const fadeIn = Math.min(1, k/0.20), fadeOut = Math.min(1, (1-k)/0.20);
-      el.style.opacity = String(peak * Math.min(fadeIn, fadeOut));
-      if(k<1){ requestAnimationFrame(step); } else { el.remove(); resolve(); }
-    }
-    requestAnimationFrame(step);
-  });
+  const t0 = performance.now(), peak=0.95;
+  function step(t){
+    const k = clamp((t-t0)/driftDurationMs,0,1);
+    const x = startX + (endX - startX)*k;
+    el.style.transform = `translate(${x}px,0)`;
+    const fadeIn = Math.min(1, k/0.20), fadeOut = Math.min(1, (1-k)/0.20);
+    el.style.opacity = String(peak * Math.min(fadeIn, fadeOut));
+    if (k<1) requestAnimationFrame(step); else el.remove();
+  }
+  requestAnimationFrame(step);
 }
 
-/* Bottom reveal (SPACING FIX APPLIED) */
+/* ---- Spacing normalization helpers (for final reveal ONLY) ----
+   Guarantee: one space between words, one space AFTER punctuation, no space before punctuation. */
+function normalizeLineSpacing(src){
+  if (!src) return '';
+  let s = src;
+
+  // Collapse any runs of whitespace to single spaces, trim ends
+  s = s.replace(/\s+/g, ' ').trim();
+
+  // Ensure exactly one space AFTER punctuation if another token follows
+  // (comma, period, semicolon, colon, exclamation, question)
+  s = s.replace(/([,.;:!?])(?!\s|$)/g, '$1 ');
+
+  // Remove space BEFORE punctuation, if any
+  s = s.replace(/\s+([,.;:!?])/g, '$1');
+
+  return s;
+}
+
+/* Build token DOM for a line while preserving *exact* spacing */
+function buildRevealLineDOM(lineText){
+  const lineEl = document.createElement('span');
+  lineEl.className = 'env-reveal-line';
+
+  const normalized = normalizeLineSpacing(lineText);
+
+  // Tokenize as (word + trailing spaces) pairs; spaces are kept as text nodes
+  const tokenRe = /(\S+)(\s*)/g;
+  let m;
+  while ((m = tokenRe.exec(normalized)) !== null){
+    const word = m[1];
+    const spaces = m[2] || '';
+
+    const token = document.createElement('span');
+    token.className = 'env-token';
+
+    const wSpan = document.createElement('span');
+    wSpan.className = 'env-word';
+    wSpan.textContent = word;
+
+    token.appendChild(wSpan);
+
+    // Keep the exact spaces as a plain text node (always visible)
+    if (spaces) token.appendChild(document.createTextNode(spaces));
+
+    lineEl.appendChild(token);
+  }
+  return { lineEl, wordSpans: Array.from(lineEl.querySelectorAll('.env-word')) };
+}
+
+/* Bottom reveal (spacing-correct) */
 async function runRevealSequence(){
   const elegraS = Number(window.__WINDS_SONG__.elegra) || 15;
   const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
@@ -213,56 +237,63 @@ async function runRevealSequence(){
 
   const bar = document.createElement('div'); bar.className='env-reveal-bar'; revealLayer.appendChild(bar);
 
-  const lines = CFG.poem.lines.map(line=>{
-    const lineEl=document.createElement('span'); lineEl.className='env-reveal-line';
-    const words = line.split(' ').map((w)=>{
-      const s=document.createElement('span'); s.className='env-reveal-word';
-      // Do NOT append spaces; CSS handles spacing (gap/margin-left)
-      s.textContent = w;
-      lineEl.appendChild(s); return s;
-    });
-    bar.appendChild(lineEl); return { lineEl, words };
-  });
+  const built = CFG.poem.lines.map(line => buildRevealLineDOM(line));
+  built.forEach(b => bar.appendChild(b.lineEl));
 
   bar.style.display='block';
 
-  await revealWords(lines[0].words, half);
-  await crossoverFade(lines[0].words, lines[1].words, half);
-  await crossoverFade(lines[1].words, lines[2].words, half);
-  await crossoverFade(lines[2].words, lines[3].words, half);
-  await fadeWords(lines[3].words, half);
+  await revealWords(built[0].wordSpans, half);
+  await crossoverFade(built[0].wordSpans, built[1].wordSpans, half);
+  await crossoverFade(built[1].wordSpans, built[2].wordSpans, half);
+  await crossoverFade(built[2].wordSpans, built[3].wordSpans, half);
+  await fadeWords(built[3].wordSpans, half);
 
   bar.remove();
 }
-async function revealWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+
+async function revealWords(words,totalMs){
+  const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='1'; w.style.transform='translateY(0px)'; await wait(per); } }
+    w.style.opacity='1'; w.style.transform='translateY(0px)';
+    await wait(per);
+  }
+}
 async function crossoverFade(outgoing,incoming,totalMs){
   const steps=Math.max(outgoing.length,incoming.length), per=totalMs/Math.max(1,steps);
   for(let i=0;i<steps;i++){
-    if(i<incoming.length){ const w=incoming[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
+    if(i<incoming.length){ const w=incoming[i];
+      w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='1'; w.style.transform='translateY(0px)'; }
-    if(i<outgoing.length){ const w=outgoing[i]; w.style.transition='opacity 600ms ease, transform 600ms ease';
+    if(i<outgoing.length){ const w=outgoing[i];
+      w.style.transition='opacity 600ms ease, transform 600ms ease';
       w.style.opacity='0'; w.style.transform='translateY(4px)'; }
     await wait(per);
-  } }
-async function fadeWords(words,totalMs){ const per=totalMs/Math.max(1,words.length);
-  for(let i=0;i<words.length;i++){ const w=words[i];
+  }
+}
+async function fadeWords(words,totalMs){
+  const per=totalMs/Math.max(1,words.length);
+  for(let i=0;i<words.length;i++){
+    const w=words[i];
     w.style.transition='opacity 600ms ease, transform 600ms ease';
-    w.style.opacity='0'; w.style.transform='translateY(4px)'; await wait(per); } }
+    w.style.opacity='0'; w.style.transform='translateY(4px)';
+    await wait(per);
+  }
+}
 
-/* Butterfly (unchanged from prior correct version) */
+/* Butterfly (Wind applied per flight) */
 function spawnButterfly(){
   const windVal = Number(window.__WINDS_SONG__.wind) || 5;
   const windFact= Math.max(0.1, windVal/5);
 
   const size=randi(CFG.butterflies.sizeMin, CFG.butterflies.sizeMax);
   const tint=(()=>{switch(poemStatus.state){
-    case 'playing': return CFG.butterflies.tint.playing;
-    case 'done':    return CFG.butterflies.tint.done;
+    case 'playing': return CFG.butterflies.tint.playing; // red during play
+    case 'done':    return CFG.butterflies.tint.done;    // green
     case 'warn':    return CFG.butterflies.tint.warn;
-    default:        return CFG.butterflies.tint.waiting; }})();
+    default:        return CFG.butterflies.tint.waiting; // yellow at start/wait
+  }})();
 
   const el=document.createElement('div');
   Object.assign(el.style,{position:'absolute',top:`${randi(40, Math.max(120, window.innerHeight/2))}px`,
