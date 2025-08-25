@@ -1,5 +1,3 @@
-<!-- environment.js -->
-<script>
 /* =========================================================================
    environment.js
    - Background-only visuals (no index.html edits)
