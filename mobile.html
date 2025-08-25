@@ -5,19 +5,29 @@
   <title>Mobile</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <style>
-    html, body { margin:0; padding:0; height:100%; background:#000; color:#fff; overscroll-behavior:none; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: #000; color: #fff; overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+    /* Full-bleed wrapper that respects iOS safe areas and dynamic viewport */
     .app {
       position: fixed;
       inset: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
              env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
+      width: 100vw;
+      height: 100dvh; /* handles mobile browser chrome changes */
       display: grid;
       place-items: center;
       background: #000; /* letterbox gutter behind the scaled app */
+      overflow: hidden;
     }
     .stage {
       position: relative;
       transform-origin: top left;
       will-change: transform;
+      /* optional smoothing on some browsers */
+      image-rendering: -webkit-optimize-contrast;
     }
     iframe {
       display: block;
@@ -28,10 +38,10 @@
       background: transparent;
     }
     .hint {
-      position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom,0);
-      text-align:center; padding:.4rem .6rem; font:12px system-ui, -apple-system, sans-serif;
-      background: rgba(0,0,0,.4); color:#ddd; opacity:0; transition:opacity .25s ease;
-      pointer-events:none; user-select:none;
+      position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0);
+      text-align: center; padding: .4rem .6rem; font: 12px system-ui, -apple-system, sans-serif;
+      background: rgba(0,0,0,.4); color: #ddd; opacity: 0; transition: opacity .25s ease;
+      pointer-events: none; user-select: none;
     }
     .hint.show { opacity: 1; }
   </style>
@@ -45,12 +55,18 @@
   <div id="hint" class="hint"></div>
 
   <script>
+    // -------- CONFIG: set your desktop design size here --------
+    // If your desktop layout is, e.g., 1440x900, put those numbers.
+    // If you want auto-measure (less reliable), set both to 0.
+    const designWidth  = 1280;
+    const designHeight = 720;
+
     // ---------- detection ----------
     const params = new URLSearchParams(location.search);
     const forceMobile  = params.has('mobile');
     const forceDesktop = params.has('desktop');
     const ua = navigator.userAgent.toLowerCase();
-    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
     const isMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/.test(ua);
     const preferMobile = forceMobile || (!forceDesktop && (isMobileUA || (isTouch && innerWidth < 1024)));
 
@@ -69,12 +85,11 @@
     // Forward the current query string to index.html (so app features keep working)
     iframe.src = 'index.html' + (location.search || '');
 
-    let designW = 0, designH = 0;   // will be measured ONCE and then locked
-    let measured = false;
+    let measured = false, autoW = 0, autoH = 0;
 
     function safeInset(which) {
       const v = getComputedStyle(document.documentElement).getPropertyValue(`env(safe-area-inset-${which})`);
-      const px = parseFloat(v) || 0; return isFinite(px) ? px : 0;
+      const px = parseFloat(v) || 0; return Number.isFinite(px) ? px : 0;
     }
 
     function setStageSize(w, h) {
@@ -82,28 +97,39 @@
       stage.style.height = h + 'px';
     }
 
+    function currentDesignSize() {
+      if (designWidth && designHeight) return { w: designWidth, h: designHeight };
+      if (measured && autoW && autoH)  return { w: autoW, h: autoH };
+      return null;
+    }
+
     function fitScale() {
+      const size = currentDesignSize();
+      if (!size) return;
+
       const vw = window.innerWidth  - (safeInset('left') + safeInset('right'));
       const vh = window.innerHeight - (safeInset('top')  + safeInset('bottom'));
-      if (!designW || !designH) return;
 
-      const scale = Math.min(vw / designW, vh / designH);
-      const tx = (vw - designW * scale) / 2;
-      const ty = (vh - designH * scale) / 2;
+      const sw = size.w, sh = size.h;
+      const scale = Math.min(vw / sw, vh / sh);
+
+      const tx = (vw - sw * scale) / 2;
+      const ty = (vh - sh * scale) / 2;
+
       stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
 
       // Optional orientation nudge
-      const needsLandscape = designW >= designH && vw < vh;
+      const needsLandscape = sw >= sh && vw < vh;
       hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
       hint.classList.toggle('show', !!hint.textContent);
     }
 
-    function tryInitialMeasure() {
+    function tryAutoMeasure() {
       try {
         const doc = iframe.contentDocument;
         if (!doc) return false;
 
-        // Measure the app ONCE (scroll/clients give a stable initial bounding box)
+        // Measure ONCE after app boots (fallback when designWidth/Height = 0)
         const w = Math.max(
           doc.documentElement.scrollWidth,
           doc.body?.scrollWidth || 0,
@@ -116,42 +142,50 @@
         );
 
         if (w > 0 && h > 0) {
-          designW = w;
-          designH = h;
-          measured = true;
-          setStageSize(designW, designH);
+          autoW = w; autoH = h; measured = true;
+          setStageSize(autoW, autoH);
           return true;
         }
       } catch { /* cross origin or not ready yet */ }
       return false;
     }
 
-    // Lock size after first good measure, then only refit scale on viewport changes
-    iframe.addEventListener('load', () => {
-      let attempts = 0;
-      const t = setInterval(() => {
-        attempts++;
-        if (tryInitialMeasure() || attempts > 20) {
-          clearInterval(t);
+    // Initialize
+    (function init() {
+      if (designWidth && designHeight) {
+        setStageSize(designWidth, designHeight);
+      }
+      // After iframe loads, if no fixed design is provided, try auto-measure
+      iframe.addEventListener('load', () => {
+        if (!(designWidth && designHeight)) {
+          let attempts = 0;
+          const t = setInterval(() => {
+            attempts++;
+            const ok = tryAutoMeasure();
+            fitScale();
+            if (ok || attempts > 20) clearInterval(t);
+          }, 150);
+        } else {
           fitScale();
         }
-      }, 150);
-    });
+      });
 
-    // Refit on viewport resize/orientation (but do NOT re-measure inner app)
-    window.addEventListener('resize', fitScale, { passive: true });
-    window.addEventListener('orientationchange', () => setTimeout(fitScale, 80), { passive: true });
+      // Refit on viewport resize/orientation (do NOT re-measure inner app)
+      window.addEventListener('resize', fitScale, { passive: true });
+      window.addEventListener('orientationchange', () => setTimeout(fitScale, 80), { passive: true });
 
-    // Prevent pinch/double-tap zoom in wrapper
-    document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
-    let lastTouch = 0;
-    document.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTouch <= 300) e.preventDefault();
-      lastTouch = now;
-    }, { passive: false });
+      // Prevent pinch/double-tap zoom in wrapper
+      document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+      let lastTouch = 0;
+      document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouch <= 300) e.preventDefault();
+        lastTouch = now;
+      }, { passive: false });
+    })();
   </script>
-    <!-- Load environment + controls -->
+
+  <!-- Load environment + controls exactly as before -->
   <script src="environment-loader.js" defer></script>
 </body>
 </html>
