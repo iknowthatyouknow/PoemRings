@@ -5,19 +5,32 @@
   <title>Mobile</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <style>
-    html, body { margin:0; padding:0; height:100%; background:#000; color:#fff; overscroll-behavior:none; }
+    /* Full-bleed, no scrolling */
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      background: #000; color: #fff;
+      overscroll-behavior: none;
+      overflow: hidden; /* <- kill page scrollbars */
+      -webkit-touch-callout: none;
+    }
+    /* Canvas that exactly matches the visual viewport */
     .app {
       position: fixed;
-      inset: env(safe-area-inset-top,0) env(safe-area-inset-right,0)
-             env(safe-area-inset-bottom,0) env(safe-area-inset-left,0);
-      display: grid;
-      place-items: center;
-      background: #000; /* letterbox gutter behind the scaled app */
+      /* use dynamic viewport units to avoid iOS toolbars gap */
+      width: 100dvw; height: 100dvh;
+      inset: 0;
+      display: grid; place-items: center;
+      background: #000;
     }
+    /* We scale this box */
     .stage {
       position: relative;
       transform-origin: top left;
       will-change: transform;
+      /* helps prevent subpixel blur on iOS */
+      backface-visibility: hidden;
+      transform: translateZ(0);
     }
     iframe {
       display: block;
@@ -26,12 +39,14 @@
       height: 100%;
       pointer-events: auto;
       background: transparent;
+      /* keep the inner doc from scrolling its own bars */
+      overflow: hidden;
     }
     .hint {
-      position: fixed; left:0; right:0; bottom: env(safe-area-inset-bottom,0);
-      text-align:center; padding:.4rem .6rem; font:12px system-ui, -apple-system, sans-serif;
-      background: rgba(0,0,0,.4); color:#ddd; opacity:0; transition:opacity .25s ease;
-      pointer-events:none; user-select:none;
+      position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0);
+      text-align: center; padding: .4rem .6rem; font: 12px system-ui, -apple-system, sans-serif;
+      background: rgba(0,0,0,.4); color: #ddd; opacity: 0; transition: opacity .25s ease;
+      pointer-events: none; user-select: none;
     }
     .hint.show { opacity: 1; }
   </style>
@@ -47,11 +62,11 @@
   <script>
     // ---------- detection ----------
     const params = new URLSearchParams(location.search);
+    const ua = navigator.userAgent.toLowerCase();
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const isMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/.test(ua);
     const forceMobile  = params.has('mobile');
     const forceDesktop = params.has('desktop');
-    const ua = navigator.userAgent.toLowerCase();
-    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const isMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/.test(ua);
     const preferMobile = forceMobile || (!forceDesktop && (isMobileUA || (isTouch && innerWidth < 1024)));
 
     // If NOT mobile: bounce to index.html (keep query string, minus our overrides)
@@ -62,21 +77,26 @@
     }
 
     // ---------- elements ----------
-    const stage = document.getElementById('stage');
+    const stage  = document.getElementById('stage');
     const iframe = document.getElementById('appFrame');
-    const hint = document.getElementById('hint');
+    const hint   = document.getElementById('hint');
 
-    // Forward the current query string to index.html BUT force desktop=1
-    // so the router inside environment-loader.js (in the iframe) will not redirect back here.
-    const innerQS = new URLSearchParams(location.search);
-    innerQS.set('desktop', '1');        // critical to avoid wrapper-in-wrapper
-    iframe.src = 'index.html?' + innerQS.toString();
+    // Forward the current query string to index.html (so app features keep working)
+    iframe.src = 'index.html' + (location.search || '');
 
-    let designW = 0, designH = 0;   // will be measured ONCE and then locked
+    // Fit mode: cover (fill, may crop) | contain (show all, may letterbox)
+    const fitMode = (params.get('fit') || 'cover').toLowerCase(); // default = cover
+
+    let designW = 0, designH = 0; // measured once and locked
+
+    function vvWidth()  { return window.visualViewport ? window.visualViewport.width  : window.innerWidth; }
+    function vvHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
 
     function safeInset(which) {
-      const v = getComputedStyle(document.documentElement).getPropertyValue(`env(safe-area-inset-${which})`);
-      const px = parseFloat(v) || 0; return isFinite(px) ? px : 0;
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue(`env(safe-area-inset-${which})`);
+      const px = parseFloat(v) || 0;
+      return isFinite(px) ? px : 0;
     }
 
     function setStageSize(w, h) {
@@ -85,16 +105,21 @@
     }
 
     function fitScale() {
-      const vw = window.innerWidth  - (safeInset('left') + safeInset('right'));
-      const vh = window.innerHeight - (safeInset('top')  + safeInset('bottom'));
       if (!designW || !designH) return;
 
-      const scale = Math.min(vw / designW, vh / designH);
+      // Use the *visual* viewport minus notches
+      const vw = vvWidth()  - (safeInset('left') + safeInset('right'));
+      const vh = vvHeight() - (safeInset('top')  + safeInset('bottom'));
+
+      // cover: fill screen (may crop); contain: show all (may letterbox)
+      const scaleCover   = Math.max(vw / designW, vh / designH);
+      const scaleContain = Math.min(vw / designW, vh / designH);
+      const scale = (fitMode === 'contain') ? scaleContain : scaleCover;
+
       const tx = (vw - designW * scale) / 2;
       const ty = (vh - designH * scale) / 2;
       stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
 
-      // Optional orientation nudge
       const needsLandscape = designW >= designH && vw < vh;
       hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
       hint.classList.toggle('show', !!hint.textContent);
@@ -105,19 +130,25 @@
         const doc = iframe.contentDocument;
         if (!doc) return false;
 
-        // Prefer the app container instead of the whole document to avoid huge heights.
-        const app = doc.querySelector('.wrap') || doc.querySelector('#app') || doc.body;
-        const rect = app.getBoundingClientRect();
+        // Prefer client box to avoid over-measuring long pages (which shrinks scale)
+        const w = Math.max(
+          doc.documentElement.clientWidth,
+          doc.body?.clientWidth || 0
+        );
+        const h = Math.max(
+          doc.documentElement.clientHeight,
+          doc.body?.clientHeight || 0
+        );
 
-        // Fallbacks/clamps so we never get a 5000px-tall stage.
-        const w = Math.max(960, Math.round(rect.width || doc.documentElement.clientWidth || 1280));
-        const h = Math.max(540, Math.round(rect.height || 720));
-        designW = w;
-        designH = h;
-
-        setStageSize(designW, designH);
-        return true;
-      } catch { /* cross-origin or not ready yet */ }
+        if (w > 0 && h > 0) {
+          designW = w;
+          designH = h;
+          setStageSize(designW, designH);
+          return true;
+        }
+      } catch {
+        /* cross-origin or not ready yet */
+      }
       return false;
     }
 
@@ -130,12 +161,16 @@
           clearInterval(t);
           fitScale();
         }
-      }, 150);
+      }, 120);
     });
 
-    // Refit on viewport resize/orientation (but do NOT re-measure inner app)
+    // Refit on viewport/toolbar changes
     window.addEventListener('resize', fitScale, { passive: true });
-    window.addEventListener('orientationchange', () => setTimeout(fitScale, 80), { passive: true });
+    window.addEventListener('orientationchange', () => setTimeout(fitScale, 90), { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fitScale, { passive: true });
+      window.visualViewport.addEventListener('scroll', fitScale, { passive: true });
+    }
 
     // Prevent pinch/double-tap zoom in wrapper
     document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
@@ -146,7 +181,8 @@
       lastTouch = now;
     }, { passive: false });
   </script>
-  <!-- IMPORTANT: do NOT include environment-loader.js here.
-       It already runs inside index.html (in the iframe). -->
+
+  <!-- Load environment + controls into the TOP page (not inside index.html) -->
+  <script src="environment-loader.js" defer></script>
 </body>
 </html>
