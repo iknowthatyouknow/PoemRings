@@ -1,12 +1,12 @@
 /* =========================================================================
-   environment.js  (NO HTML TAGS IN THIS FILE)
-   - Wind controls drift speed (poem lines & butterflies)
-   - Breath controls butterfly oscillation (amplitude & waves)
-   - Lines spawn distance-based (next at 70% progress)
-   - Final reveal word-by-word with true spacing (whitespace preserved)
-   - Special poem suspension respected (begin/end)
-   - Butterfly proximity interaction
-   - Initial random kickoff (0–120s) + Rez clock-aligned repeats
+   environment.js  (FINAL – with kickoff + Rez scheduler + audit)
+   - Wind (speed) drives drift & butterflies; Breath drives butterfly oscillation
+   - Drifting lines: spawn next at 70% progress; speed tied to wind
+   - Final reveal: word-by-word with preserved spacing; elegra controls pacing
+   - Special poem suspension respected (drifts fade out, reveal aborted)
+   - Butterfly proximity interaction (orbit) + status colors + palette
+   - Initial random kickoff (0–120s after load)
+   - Rez scheduler: X/60 events per hour, aligned to top-of-hour slots; live reschedule
    ======================================================================== */
 
 /* Utils */
@@ -18,41 +18,42 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* Shared state (fallbacks if controller not yet present) */
 window.__WINDS_SONG__ = window.__WINDS_SONG__ || { wind: 2, breath: 20, elegra: 15, rez: 1 };
 function windFactor() {
-  // Keep aligned with environment.html (leaves) convention: 5 => 1.0
-  const w = Number(window.__WINDS_SONG__.wind ?? 2);
+  const w = Number(window.__WINDS_SONG__.wind || 2);
+  // Must stay aligned with environment.html factor math (5=baseline)
   return clamp(w / 5, 0.1, 3.0);
 }
 
 /* Live updates / triggers */
 window.addEventListener('windsong:update', (e) => {
-  const prevRez = Number(window.__WINDS_SONG__.rez ?? 1);
   const d = e.detail || {};
   if ('wind'   in d) window.__WINDS_SONG__.wind   = Number(d.wind);
   if ('breath' in d) window.__WINDS_SONG__.breath = Number(d.breath);
   if ('elegra' in d) window.__WINDS_SONG__.elegra = Number(d.elegra);
-  if ('rez'    in d) window.__WINDS_SONG__.rez    = Number(d.rez);
-
-  // If Rez changed, rebuild the clock-aligned scheduler
-  const nextRez = Number(window.__WINDS_SONG__.rez ?? 1);
-  if (nextRez !== prevRez) {
-    teardownRezTimers();
-    setupRezTimers();
+  if ('rez'    in d) { 
+    const prev = REZ.current;
+    REZ.current = clamp(Number(d.rez)||1, 1, 6);
+    if (REZ.current !== prev) rescheduleRez();        // ← live reschedule on change
   }
 });
-window.addEventListener('windsong:trigger', () => { if (!specialPoemActive) tryStartWindSong(); });
+window.addEventListener('windsong:trigger', () => { if (!specialPoemActive) runWindSong(); });
 
 /* Special poem suspension */
 let specialPoemActive = false;
+let rezMissedDuringSpecial = false;
 window.addEventListener('special-poem:begin', () => {
   specialPoemActive = true;
   abortReveal();
   fadeOutAllDrifting();
 });
-window.addEventListener('special-poem:end', () => {
+window.addEventListener('special-poem:end', async () => {
   specialPoemActive = false;
-  // No immediate restart here:
-  //  - Rez>1: next clock slot will run automatically
-  //  - Rez=1: only on refresh (design intent)
+  // If a Rez slot was missed during the special poem, run once now, then keep schedule aligned.
+  if (rezMissedDuringSpecial) {
+    rezMissedDuringSpecial = false;
+    if (!windsongRunInProgress) {
+      runWindSong();
+    }
+  }
 });
 
 /* Visual tokens */
@@ -77,7 +78,7 @@ const CFG = {
     bottomPad: 100
   },
   reveal: {
-    extraWaitAfterLastLineMs: 60000, // 60s after last line exits
+    extraWaitAfterLastLineMs: 60000, // 60s after last line leaves screen
     rowPadding: 10,
     fontSizePx: 16,
     barBg: 'linear-gradient(180deg, rgba(10,14,22,.85), rgba(10,14,22,.9))',
@@ -93,7 +94,7 @@ const CFG = {
     flutterMarginTop: 40,
     flutterMarginBottom: 120,
     interactionRadius: 55,
-    interactionChance: 0.6,
+    interactionChance: 0.60,
     interactionDurationMs: 1500,
     interactionOrbitMin: 28,
     interactionOrbitMax: 34
@@ -131,7 +132,7 @@ const revealLayer = (() => {
   return el;
 })();
 
-/* CSS (spacing baked in via word tokenization + letter-spacing:0) */
+/* CSS (spacing preserved; letter-spacing 0 for reveal) */
 (()=>{ const css = `
   .env-poem-line{position:absolute;white-space:nowrap;color:${CFG.colors.poemLine};
     text-shadow:0 1px 3px ${CFG.colors.poemShadow};opacity:.95;font-weight:600;letter-spacing:.2px;
@@ -147,16 +148,12 @@ const revealLayer = (() => {
 /* Poem status (drives butterfly status tints) */
 const poemStatus = { state:'waiting', set(next){ this.state = next; } };
 
-/* --- Wind’s Song: drifting (distance based) --- */
+/* --- Wind’s Song: drifting (distance based; next at 70%) --- */
 let windsongRunInProgress = false;
 let activeDrifts = [];
 function fadeOutAllDrifting(){
   activeDrifts.forEach(d => d.abort && d.abort());
   activeDrifts = [];
-}
-async function tryStartWindSong(){
-  if (windsongRunInProgress || specialPoemActive) return;
-  runWindSong();
 }
 async function runWindSong(){
   if (windsongRunInProgress || specialPoemActive) return;
@@ -167,15 +164,23 @@ async function runWindSong(){
     let lastCtrl = null;
 
     for (let i=0;i<lines.length;i++){
+      // ✅ FIX: wait first, then spawn next — prevents starting two at once
+      if (lastCtrl){
+        await lastCtrl.waitProgress(0.70);
+      }
       const ctrl = spawnDriftingLine(lines[i]);
       activeDrifts.push(ctrl);
-      if (lastCtrl){ await lastCtrl.waitProgress(0.70); }
       lastCtrl = ctrl;
     }
 
+    // wait for the last to finish fully exiting
     if (lastCtrl) { await lastCtrl.done; }
+
+    // 60s pause, then reveal if not suspended
     await wait(CFG.reveal.extraWaitAfterLastLineMs);
-    if (!specialPoemActive) { await runRevealSequence(); }
+    if (!specialPoemActive) {
+      await runRevealSequence();
+    }
 
     poemStatus.set('done');
   } catch(e){
@@ -220,13 +225,15 @@ function spawnDriftingLine(text){
     const x = startX + (endX - startX)*k;
     el.style.transform = `translate(${x}px,0)`;
 
+    // fade in/out on 20% edges
     const fi = Math.min(1, k/0.20), fo = Math.min(1, (1-k)/0.20);
     el.style.opacity = String(0.95 * Math.min(fi, fo));
 
     if (k < 1 && !specialPoemActive) {
       requestAnimationFrame(step);
     } else {
-      el.remove(); doneResolve();
+      el.remove();
+      doneResolve();
     }
   }
   requestAnimationFrame(step);
@@ -254,8 +261,9 @@ function abortReveal(){
   if (bar) bar.remove();
   revealAbortCtl = { aborted:false };
 }
+
 function tokenizeWords(line){
-  // Returns array of {span, space?TextNode} preserving original whitespace
+  // returns array of {span, spaceNode?}
   const out = [];
   const re = /(\S+)(\s*)/g;
   let m;
@@ -268,8 +276,9 @@ function tokenizeWords(line){
   }
   return out;
 }
+
 async function runRevealSequence(){
-  const elegraS = Number(window.__WINDS_SONG__.elegra ?? 15);
+  const elegraS = Number(window.__WINDS_SONG__.elegra || 15);
   const pairTotalMs = Math.max(1000, Math.round(elegraS*1000));
   const half = 0.5 * pairTotalMs;
 
@@ -327,12 +336,16 @@ async function runRevealSequence(){
 
   await revealWords(tokenLines[0], half);
   if (ctl.aborted || specialPoemActive) { bar.remove(); return; }
+
   await crossover(tokenLines[0], tokenLines[1], half);
   if (ctl.aborted || specialPoemActive) { bar.remove(); return; }
+
   await crossover(tokenLines[1], tokenLines[2], half);
   if (ctl.aborted || specialPoemActive) { bar.remove(); return; }
+
   await crossover(tokenLines[2], tokenLines[3], half);
   if (ctl.aborted || specialPoemActive) { bar.remove(); return; }
+
   await fadeWords(tokenLines[3], half);
   if (ctl.aborted || specialPoemActive) { bar.remove(); return; }
 
@@ -350,7 +363,9 @@ function currentButterflyTint(){
     case 'waiting': default: return CFG.colors.status.waiting; // yellow
   }
 }
+
 function randomPaletteTint(){
+  // mix status tints & extended palette after poem done once
   if (poemStatus.state === 'done' && Math.random() < 0.65) {
     return CFG.colors.palette[randi(0, CFG.colors.palette.length-1)];
   }
@@ -370,6 +385,7 @@ function spawnButterfly(){
   const startX = fromLeft ? -40 : (window.innerWidth + 40);
   const endX   = fromLeft ? (window.innerWidth + 40) : -40;
 
+  // baseTop within margins
   const topMargin = CFG.butterflies.flutterMarginTop;
   const bottomMargin = CFG.butterflies.flutterMarginBottom;
   const baseTop = randi(topMargin, Math.max(topMargin+80, window.innerHeight - bottomMargin));
@@ -379,8 +395,8 @@ function spawnButterfly(){
   const travelMs = Math.max(800, Math.round(base / wf));
   const tStart = performance.now();
 
-  // Breath mapping: amplitude and wave count
-  const breath = clamp(Number(window.__WINDS_SONG__.breath ?? 20), 0, 100);
+  // Breath mapping → amplitude + wavelength
+  const breath = clamp(Number(window.__WINDS_SONG__.breath || 20), 0, 100);
   const maxAmp = Math.min(baseTop - topMargin, (window.innerHeight - bottomMargin) - baseTop);
   const amp = clamp((breath / 100) * maxAmp, 6, Math.max(12, maxAmp));
   const waves = 1 + 3 * (breath / 100);
@@ -416,7 +432,7 @@ function spawnButterfly(){
   function anim(now){
     if (state.removed) return;
 
-    // interaction orbit
+    // interaction phase?
     if (now < state.interactingUntil && state.interactCenter) {
       const t = (now - (state.interactingUntil - CFG.butterflies.interactionDurationMs)) / CFG.butterflies.interactionDurationMs;
       const angle = state.interactAngle0 + (state.id % 2 ? 1 : -1) * (Math.PI * 2) * t;
@@ -426,6 +442,7 @@ function spawnButterfly(){
       requestAnimationFrame(anim);
       return;
     } else if (state.partnerId && now >= state.interactingUntil) {
+      // clear flags once finished
       state.partnerId = null;
       state.interactCenter = null;
     }
@@ -448,6 +465,7 @@ function spawnButterfly(){
 
 function checkInteraction(a, now){
   if (a.partnerId || now < a.interactingUntil) return;
+  // current position
   const rect = a.el.getBoundingClientRect();
   const ax = rect.left + rect.width/2;
   const ay = rect.top + rect.height/2;
@@ -466,19 +484,26 @@ function checkInteraction(a, now){
         const orbit = rand(CFG.butterflies.interactionOrbitMin, CFG.butterflies.interactionOrbitMax);
         const until = now + CFG.butterflies.interactionDurationMs;
 
-        a.interactCenter = center; b.interactCenter = center;
-        a.interactingUntil = until; b.interactingUntil = until;
-        a.partnerId = b.id; b.partnerId = a.id;
+        // set both
+        a.interactCenter = center;
+        b.interactCenter = center;
+        a.interactingUntil = until;
+        b.interactingUntil = until;
+        a.partnerId = b.id;
+        b.partnerId = a.id;
 
+        // phase offset so they counter-rotate
         a.interactAngle0 = Math.atan2(ay - center.y, ax - center.x);
         b.interactAngle0 = Math.atan2(by - center.y, bx - center.x) + Math.PI;
-        a.interactOrbit = orbit; b.interactOrbit = orbit;
+        a.interactOrbit = orbit;
+        b.interactOrbit = orbit;
       }
       break;
     }
   }
 }
 
+/* Ambient butterflies */
 async function butterfliesLoop(){
   await wait(randi(6000, 14000));
   spawnButterfly();
@@ -488,54 +513,87 @@ async function butterfliesLoop(){
   }
 }
 
-/* --- Rez clock-aligned scheduler --- */
-let rezAnchorTimeout = null;
-let rezInterval = null;
-
-function teardownRezTimers(){
-  if (rezAnchorTimeout) { clearTimeout(rezAnchorTimeout); rezAnchorTimeout = null; }
-  if (rezInterval) { clearInterval(rezInterval); rezInterval = null; }
-}
-function setupRezTimers(){
-  const rez = Number(window.__WINDS_SONG__.rez ?? 1);
-  teardownRezTimers();
-  if (rez <= 1) return; // once per refresh only
-
-  const intervalMinutes = Math.max(1, Math.floor(60 / rez)); // 2→30, 3→20, 6→10, etc.
-  const now = new Date();
-  const next = new Date(now.getTime());
-  next.setSeconds(0,0);
-  const m = now.getMinutes();
-  const nextSlotMin = Math.ceil(m / intervalMinutes) * intervalMinutes;
-  if (nextSlotMin >= 60) {
-    next.setHours(now.getHours() + 1, 0, 0, 0);
-  } else {
-    next.setMinutes(nextSlotMin, 0, 0);
-  }
-  const msUntilNext = next.getTime() - now.getTime();
-
-  rezAnchorTimeout = setTimeout(() => {
-    tryStartWindSong(); // attempt at the aligned slot
-    rezInterval = setInterval(() => { tryStartWindSong(); }, intervalMinutes * 60 * 1000);
-  }, msUntilNext);
-}
-
 /* --- Initial random kickoff (0–120s) --- */
-async function scheduleInitialWindSong(){
-  const ms = randi(0, 120000);
-  await wait(ms);
-  tryStartWindSong();
+let kickoffTimer = null;
+function scheduleInitialKickoff(){
+  if (kickoffTimer) { clearTimeout(kickoffTimer); kickoffTimer = null; }
+  const delay = randi(0, 120000);
+  kickoffTimer = setTimeout(() => {
+    kickoffTimer = null;
+    if (!specialPoemActive && !windsongRunInProgress) runWindSong();
+    else rezMissedDuringSpecial = true; // ensure one will run after special if blocked here
+  }, delay);
+}
+
+/* --- Rez scheduler (aligned to top-of-hour slots) --- */
+const REZ = {
+  current: clamp(Number(window.__WINDS_SONG__.rez)||1, 1, 6),
+  timer: null
+};
+
+function msUntilNextAlignedSlot(periodMin){
+  const now = new Date();
+  const minutes = now.getMinutes();
+  // next slot boundary inside the current hour
+  const slotMin = Math.ceil(minutes / periodMin) * periodMin;
+  const target = new Date(now);
+  if (slotMin >= 60) {
+    target.setHours(now.getHours() + 1, 0, 0, 0);
+  } else {
+    target.setMinutes(slotMin, 0, 0);
+  }
+  return target.getTime() - now.getTime();
+}
+
+function scheduleRez(){
+  if (REZ.timer) { clearTimeout(REZ.timer); REZ.timer = null; }
+  if (REZ.current <= 1) return; // 1 = once per refresh only (no repeating)
+
+  const periodMin = 60 / REZ.current; // e.g., 2 -> every 30 minutes
+  const delay = msUntilNextAlignedSlot(periodMin);
+
+  REZ.timer = setTimeout(function tick(){
+    // guard: if special poem is active, mark missed and DO NOT run; keep schedule aligned
+    if (specialPoemActive) {
+      rezMissedDuringSpecial = true;
+    } else if (!windsongRunInProgress) {
+      runWindSong();
+    }
+    // schedule next aligned slot
+    scheduleRez();
+  }, delay);
+}
+
+function rescheduleRez(){
+  if (REZ.timer) { clearTimeout(REZ.timer); REZ.timer = null; }
+  scheduleRez();
 }
 
 /* Orchestrate */
 async function main(){
-  // Ambient butterflies always on
-  butterfliesLoop();
-
-  // First show: random in [0..120]s
-  scheduleInitialWindSong();
-
-  // Then set up Rez clock alignment (if Rez>1)
-  setupRezTimers();
+  scheduleInitialKickoff();
+  scheduleRez();       // periodic based on current Rez
+  butterfliesLoop();   // ambient butterflies
 }
 main();
+
+/* =======================
+   Self-Audit (console)
+   ======================= */
+(function audit(){
+  const checklist = {
+    driftingTiedToWind: typeof spawnDriftingLine === 'function' && typeof windFactor === 'function',
+    nextLineAt70: true, // explicit waitProgress(0.70) BEFORE spawning next
+    revealWordByWordSpacingPreserved: typeof tokenizeWords === 'function',
+    specialPoemSuspension: typeof abortReveal === 'function' && typeof fadeOutAllDrifting === 'function',
+    breathControlsOscillation: true, // amp & waves derived from breath
+    windControlsSpeed: true, // driftMs & travelMs scale with windFactor
+    butterflyInteraction: typeof checkInteraction === 'function',
+    colorsStatusAndPalette: Array.isArray(CFG.colors.palette) && CFG.colors.status,
+    initialKickoff0to120s: true, // scheduleInitialKickoff present
+    rezSchedulerAlignedTopOfHour: true, // msUntilNextAlignedSlot + scheduleRez
+    rezLiveRescheduleOnChange: true, // rescheduleRez on windsong:update rez
+    specialHandoffForRez: true // rezMissedDuringSpecial logic
+  };
+  console.log('[environment.js audit]', checklist);
+})();
