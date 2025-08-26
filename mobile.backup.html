@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mobile</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <style>
+    /* Full-bleed, no scrolling */
+    html, body {
+      margin: 0; padding: 0;
+      height: 100%;
+      background: #000; color: #fff;
+      overscroll-behavior: none;
+      overflow: hidden; /* kill outer scrollbars */
+      -webkit-touch-callout: none;
+    }
+    /* Canvas that exactly matches the visual viewport */
+    .app {
+      position: fixed;
+      width: 100dvw; height: 100dvh; /* avoid iOS toolbar gaps */
+      inset: 0;
+      display: grid; place-items: center;
+      background: #000;
+    }
+    /* We scale this box */
+    .stage {
+      position: relative;
+      transform-origin: top left;
+      will-change: transform;
+      backface-visibility: hidden;
+      transform: translateZ(0);
+    }
+    iframe {
+      display: block;
+      border: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+      background: transparent;
+      /* the inner doc will be locked against horizontal growth */
+      overflow: hidden;
+    }
+    .hint {
+      position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0);
+      text-align: center; padding: .4rem .6rem; font: 12px system-ui, -apple-system, sans-serif;
+      background: rgba(0,0,0,.4); color: #ddd; opacity: 0; transition: opacity .25s ease;
+      pointer-events: none; user-select: none;
+    }
+    .hint.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div id="stage" class="stage">
+      <iframe id="appFrame" allow="autoplay; clipboard-read; clipboard-write"></iframe>
+    </div>
+  </div>
+  <div id="hint" class="hint"></div>
+
+  <script>
+    // ---------- detection ----------
+    const params = new URLSearchParams(location.search);
+    const ua = navigator.userAgent.toLowerCase();
+    const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    const isMobileUA = /iphone|ipad|ipod|android|windows phone|blackberry|silk|kindle|opera mini|mobile/.test(ua);
+    const forceMobile  = params.has('mobile');
+    const forceDesktop = params.has('desktop');
+    const preferMobile = forceMobile || (!forceDesktop && (isMobileUA || (isTouch && innerWidth < 1024)));
+
+    // If NOT mobile: bounce to index.html (keep query string, minus our overrides)
+    if (!preferMobile) {
+      const kept = [...params.entries()].filter(([k]) => k !== 'mobile' && k !== 'desktop');
+      const qs = kept.length ? ('?' + new URLSearchParams(kept).toString()) : '';
+      location.replace('index.html' + qs);
+    }
+
+    // ---------- elements ----------
+    const stage  = document.getElementById('stage');
+    const iframe = document.getElementById('appFrame');
+    const hint   = document.getElementById('hint');
+
+    // Forward the current query string to index.html (so app features keep working)
+    iframe.src = 'index.html' + (location.search || '');
+
+    // Fit mode: cover (fill, may crop) | contain (show all, may letterbox)
+    const fitMode = (params.get('fit') || 'cover').toLowerCase(); // default = cover
+
+    let designW = 0, designH = 0; // measured once and locked
+
+    function vvWidth()  { return window.visualViewport ? window.visualViewport.width  : window.innerWidth; }
+    function vvHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
+
+    function safeInset(which) {
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue(`env(safe-area-inset-${which})`);
+      const px = parseFloat(v) || 0;
+      return isFinite(px) ? px : 0;
+    }
+
+    function setStageSize(w, h) {
+      stage.style.width  = w + 'px';
+      stage.style.height = h + 'px';
+    }
+
+    function fitScale() {
+      if (!designW || !designH) return;
+
+      // Use the *visual* viewport minus notches
+      const vw = vvWidth()  - (safeInset('left') + safeInset('right'));
+      const vh = vvHeight() - (safeInset('top')  + safeInset('bottom'));
+
+      const scaleCover   = Math.max(vw / designW, vh / designH);
+      const scaleContain = Math.min(vw / designW, vh / designH);
+      const scale = (fitMode === 'contain') ? scaleContain : scaleCover;
+
+      const tx = (vw - designW * scale) / 2;
+      const ty = (vh - designH * scale) / 2;
+      stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+      const needsLandscape = designW >= designH && vw < vh;
+      hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
+      hint.classList.toggle('show', !!hint.textContent);
+    }
+
+    function lockInnerWidth(doc, widthPx) {
+      // Hard lock the inner layout width so later DOM changes can't widen the page
+      const style = doc.createElement('style');
+      style.textContent = `
+        html, body { 
+          width: ${widthPx}px !important; 
+          max-width: ${widthPx}px !important; 
+          overflow-x: hidden !important; 
+          margin: 0 !important; 
+          padding: 0 !important;
+        }
+        /* guard: never let any child force horizontal scroll */
+        * { box-sizing: border-box; }
+      `;
+      doc.head.appendChild(style);
+
+      // Belt & suspenders: if something still tries to change it, snap back
+      const snap = () => {
+        doc.documentElement.style.width = widthPx + 'px';
+        doc.body.style.width = widthPx + 'px';
+        doc.documentElement.style.maxWidth = widthPx + 'px';
+        doc.body.style.maxWidth = widthPx + 'px';
+        doc.documentElement.style.overflowX = 'hidden';
+        doc.body.style.overflowX = 'hidden';
+      };
+      snap();
+
+      // Observe body size changes and re-apply the lock if needed
+      try {
+        new ResizeObserver(snap).observe(doc.body);
+      } catch {}
+    }
+
+    function tryInitialMeasureAndLock() {
+      try {
+        const doc = iframe.contentDocument;
+        if (!doc) return false;
+
+        // Prefer client box to avoid measuring long content that would shrink scale
+        const w = Math.max(
+          doc.documentElement.clientWidth,
+          doc.body?.clientWidth || 0
+        );
+        const h = Math.max(
+          doc.documentElement.clientHeight,
+          doc.body?.clientHeight || 0
+        );
+
+        if (w > 0 && h > 0) {
+          designW = w;
+          designH = h;
+          setStageSize(designW, designH);
+          lockInnerWidth(doc, designW); // <-- THE FIX: freeze inner layout width
+          return true;
+        }
+      } catch {
+        /* cross-origin or not ready yet */
+      }
+      return false;
+    }
+
+    // Lock size after first good measure, then only refit scale on viewport changes
+    iframe.addEventListener('load', () => {
+      let attempts = 0;
+      const t = setInterval(() => {
+        attempts++;
+        if (tryInitialMeasureAndLock() || attempts > 20) {
+          clearInterval(t);
+          fitScale();
+        }
+      }, 120);
+    });
+
+    // Refit on viewport/toolbar changes
+    window.addEventListener('resize', fitScale, { passive: true });
+    window.addEventListener('orientationchange', () => setTimeout(fitScale, 90), { passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fitScale, { passive: true });
+      window.visualViewport.addEventListener('scroll', fitScale, { passive: true });
+    }
+
+    // Prevent pinch/double-tap zoom in wrapper
+    document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+    let lastTouch = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouch <= 300) e.preventDefault();
+      lastTouch = now;
+    }, { passive: false });
+  </script>
+
+  <!-- Load environment + controls into the TOP page (not inside index.html) -->
+  <script src="environment-loader.js" defer></script>
+</body>
+</html>
