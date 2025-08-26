@@ -5,57 +5,61 @@
   <title>Mobile</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <style>
-    /* Full-bleed, no scrolling */
+    /* Full-bleed, no page scroll */
     html, body {
-      margin: 0; padding: 0;
+      margin: 0;
+      padding: 0;
       height: 100%;
-      background: #000; color: #fff;
+      background: #000;
+      color: #fff;
       overscroll-behavior: none;
-      overflow: hidden; /* <- kill page scrollbars */
+      overflow: hidden;              /* no outer scrollbars */
       -webkit-touch-callout: none;
     }
-    /* Canvas that exactly matches the visual viewport */
+
+    /* Wrapper that always matches the visual viewport */
     .app {
       position: fixed;
-      /* use dynamic viewport units to avoid iOS toolbars gap */
-      width: 100dvw; height: 100dvh;
       inset: 0;
-      display: grid; place-items: center;
-      background: #000;
+      width: 100dvw;
+      height: 100dvh;
+      background: #000;              /* behind the app */
     }
-    /* We scale this box */
-    .stage {
-      position: relative;
-      transform-origin: top left;
-      will-change: transform;
-      /* helps prevent subpixel blur on iOS */
-      backface-visibility: hidden;
-      transform: translateZ(0);
-    }
+
+    /* The app itself: 1:1 fit, no transforms */
     iframe {
-      display: block;
-      border: 0;
+      position: absolute;
+      left: 0; top: 0;
       width: 100%;
       height: 100%;
-      pointer-events: auto;
+      display: block;
+      border: 0;
       background: transparent;
-      /* keep the inner doc from scrolling its own bars */
-      overflow: hidden;
+      pointer-events: auto;
+      overflow: hidden;              /* prevent inner scrollbars */
     }
+
+    /* Optional tiny hint bar (we keep but hidden unless we use it) */
     .hint {
-      position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0);
-      text-align: center; padding: .4rem .6rem; font: 12px system-ui, -apple-system, sans-serif;
-      background: rgba(0,0,0,.4); color: #ddd; opacity: 0; transition: opacity .25s ease;
-      pointer-events: none; user-select: none;
+      position: fixed;
+      left: 0; right: 0;
+      bottom: env(safe-area-inset-bottom, 0);
+      text-align: center;
+      padding: .4rem .6rem;
+      font: 12px system-ui, -apple-system, sans-serif;
+      background: rgba(0,0,0,.4);
+      color: #ddd;
+      opacity: 0;
+      transition: opacity .25s ease;
+      pointer-events: none;
+      user-select: none;
     }
     .hint.show { opacity: 1; }
   </style>
 </head>
 <body>
   <div class="app">
-    <div id="stage" class="stage">
-      <iframe id="appFrame" allow="autoplay; clipboard-read; clipboard-write"></iframe>
-    </div>
+    <iframe id="appFrame" allow="autoplay; clipboard-read; clipboard-write"></iframe>
   </div>
   <div id="hint" class="hint"></div>
 
@@ -77,102 +81,31 @@
     }
 
     // ---------- elements ----------
-    const stage  = document.getElementById('stage');
     const iframe = document.getElementById('appFrame');
     const hint   = document.getElementById('hint');
 
     // Forward the current query string to index.html (so app features keep working)
+    // IMPORTANT: We DO NOT load environment-loader.js here; index.html should do it.
     iframe.src = 'index.html' + (location.search || '');
 
-    // Fit mode: cover (fill, may crop) | contain (show all, may letterbox)
-    const fitMode = (params.get('fit') || 'cover').toLowerCase(); // default = cover
-
-    let designW = 0, designH = 0; // measured once and locked
-
-    function vvWidth()  { return window.visualViewport ? window.visualViewport.width  : window.innerWidth; }
-    function vvHeight() { return window.visualViewport ? window.visualViewport.height : window.innerHeight; }
-
-    function safeInset(which) {
-      const v = getComputedStyle(document.documentElement)
-        .getPropertyValue(`env(safe-area-inset-${which})`);
-      const px = parseFloat(v) || 0;
-      return isFinite(px) ? px : 0;
+    // Refit on visual viewport changes (prevents gaps when iOS toolbars show/hide)
+    function refit() {
+      // Nothing to compute (we’re 1:1), but we keep this hook
+      // if you want to show a "rotate device" hint later.
+      // Example (disabled by default):
+      // const needsLandscape = iframe.clientWidth < iframe.clientHeight;
+      // hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
+      // hint.classList.toggle('show', !!hint.textContent);
     }
 
-    function setStageSize(w, h) {
-      stage.style.width  = w + 'px';
-      stage.style.height = h + 'px';
-    }
-
-    function fitScale() {
-      if (!designW || !designH) return;
-
-      // Use the *visual* viewport minus notches
-      const vw = vvWidth()  - (safeInset('left') + safeInset('right'));
-      const vh = vvHeight() - (safeInset('top')  + safeInset('bottom'));
-
-      // cover: fill screen (may crop); contain: show all (may letterbox)
-      const scaleCover   = Math.max(vw / designW, vh / designH);
-      const scaleContain = Math.min(vw / designW, vh / designH);
-      const scale = (fitMode === 'contain') ? scaleContain : scaleCover;
-
-      const tx = (vw - designW * scale) / 2;
-      const ty = (vh - designH * scale) / 2;
-      stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-
-      const needsLandscape = designW >= designH && vw < vh;
-      hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
-      hint.classList.toggle('show', !!hint.textContent);
-    }
-
-    function tryInitialMeasure() {
-      try {
-        const doc = iframe.contentDocument;
-        if (!doc) return false;
-
-        // Prefer client box to avoid over-measuring long pages (which shrinks scale)
-        const w = Math.max(
-          doc.documentElement.clientWidth,
-          doc.body?.clientWidth || 0
-        );
-        const h = Math.max(
-          doc.documentElement.clientHeight,
-          doc.body?.clientHeight || 0
-        );
-
-        if (w > 0 && h > 0) {
-          designW = w;
-          designH = h;
-          setStageSize(designW, designH);
-          return true;
-        }
-      } catch {
-        /* cross-origin or not ready yet */
-      }
-      return false;
-    }
-
-    // Lock size after first good measure, then only refit scale on viewport changes
-    iframe.addEventListener('load', () => {
-      let attempts = 0;
-      const t = setInterval(() => {
-        attempts++;
-        if (tryInitialMeasure() || attempts > 20) {
-          clearInterval(t);
-          fitScale();
-        }
-      }, 120);
-    });
-
-    // Refit on viewport/toolbar changes
-    window.addEventListener('resize', fitScale, { passive: true });
-    window.addEventListener('orientationchange', () => setTimeout(fitScale, 90), { passive: true });
+    window.addEventListener('resize', refit, { passive: true });
+    window.addEventListener('orientationchange', () => setTimeout(refit, 90), { passive: true });
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', fitScale, { passive: true });
-      window.visualViewport.addEventListener('scroll', fitScale, { passive: true });
+      window.visualViewport.addEventListener('resize', refit, { passive: true });
+      window.visualViewport.addEventListener('scroll', refit, { passive: true });
     }
 
-    // Prevent pinch/double-tap zoom in wrapper
+    // Prevent pinch/double-tap zoom in wrapper (keeps gestures on your inner app)
     document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
     let lastTouch = 0;
     document.addEventListener('touchend', (e) => {
@@ -181,8 +114,5 @@
       lastTouch = now;
     }, { passive: false });
   </script>
-
-  <!-- Load environment + controls into the TOP page (not inside index.html) -->
-  <script src="environment-loader.js" defer></script>
 </body>
 </html>
