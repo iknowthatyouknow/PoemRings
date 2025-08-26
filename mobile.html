@@ -39,29 +39,13 @@
       overflow: hidden;              /* prevent inner scrollbars */
     }
 
-    /* Optional tiny hint bar (we keep but hidden unless we use it) */
-    .hint {
-      position: fixed;
-      left: 0; right: 0;
-      bottom: env(safe-area-inset-bottom, 0);
-      text-align: center;
-      padding: .4rem .6rem;
-      font: 12px system-ui, -apple-system, sans-serif;
-      background: rgba(0,0,0,.4);
-      color: #ddd;
-      opacity: 0;
-      transition: opacity .25s ease;
-      pointer-events: none;
-      user-select: none;
-    }
-    .hint.show { opacity: 1; }
+    .hint { display:none; }
   </style>
 </head>
 <body>
   <div class="app">
     <iframe id="appFrame" allow="autoplay; clipboard-read; clipboard-write"></iframe>
   </div>
-  <div id="hint" class="hint"></div>
 
   <script>
     // ---------- detection ----------
@@ -80,24 +64,21 @@
       location.replace('index.html' + qs);
     }
 
-    // ---------- elements ----------
+    // ---------- load index.html in the iframe ----------
     const iframe = document.getElementById('appFrame');
-    const hint   = document.getElementById('hint');
 
-    // Forward the current query string to index.html (so app features keep working)
-    // IMPORTANT: We DO NOT load environment-loader.js here; index.html should do it.
-    iframe.src = 'index.html' + (location.search || '');
+    // Keep existing params except our overrides, and add two guards:
+    //  - desktop=1   -> tells any mobile router inside index.html not to bounce back
+    //  - embedded=1  -> our router also skips when it sees this
+    const kept = [...params.entries()].filter(([k]) => (k !== 'mobile' && k !== 'desktop'));
+    const qp = new URLSearchParams(kept);
+    qp.set('desktop', '1');
+    qp.set('embedded', '1');
 
-    // Refit on visual viewport changes (prevents gaps when iOS toolbars show/hide)
-    function refit() {
-      // Nothing to compute (we’re 1:1), but we keep this hook
-      // if you want to show a "rotate device" hint later.
-      // Example (disabled by default):
-      // const needsLandscape = iframe.clientWidth < iframe.clientHeight;
-      // hint.textContent = needsLandscape ? 'Tip: rotate your device for a better view' : '';
-      // hint.classList.toggle('show', !!hint.textContent);
-    }
+    iframe.src = 'index.html?' + qp.toString();
 
+    // Keep wrapper at exact visual viewport; no scaling needed.
+    function refit(){ /* no-op by design */ }
     window.addEventListener('resize', refit, { passive: true });
     window.addEventListener('orientationchange', () => setTimeout(refit, 90), { passive: true });
     if (window.visualViewport) {
@@ -105,7 +86,7 @@
       window.visualViewport.addEventListener('scroll', refit, { passive: true });
     }
 
-    // Prevent pinch/double-tap zoom in wrapper (keeps gestures on your inner app)
+    // Prevent pinch/double-tap zoom in wrapper
     document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
     let lastTouch = 0;
     document.addEventListener('touchend', (e) => {
